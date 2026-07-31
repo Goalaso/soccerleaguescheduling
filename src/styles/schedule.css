@@ -1,0 +1,409 @@
+/* Schedule & Results: calendar, record-results form, success screen */
+
+.schedule-layout {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 1.5rem;
+  align-items: stretch;
+}
+
+.schedule-sidebar {
+  display: flex;
+  flex-direction: column;
+}
+
+.calendar-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  font-size: 0.82rem;
+  color: var(--text-soft);
+  margin-bottom: 1.5rem;
+}
+
+.calendar-legend span {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.legend-dot-recorded {
+  background: var(--accent);
+}
+
+.legend-dot-needs {
+  background: var(--warning-text);
+}
+
+.legend-dot-upcoming {
+  background: var(--text-faint);
+}
+
+.schedule-section-label {
+  margin-top: 1rem;
+}
+
+.match-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  width: 100%;
+  text-align: left;
+  background: var(--bg-panel-alt);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  padding: 0.75rem;
+  margin-bottom: 0.6rem;
+  cursor: default;
+  font: inherit;
+  color: inherit;
+}
+
+.match-card-clickable {
+  cursor: pointer;
+}
+
+.match-card-clickable:hover {
+  border-color: var(--accent);
+}
+
+.match-card-needs {
+  border-color: var(--warning-text);
+  background: rgba(242, 153, 74, 0.08);
+}
+
+.match-card-date {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.match-card-title {
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+.match-card-status {
+  font-size: 0.72rem;
+}
+
+.status-needs {
+  color: var(--warning-text);
+}
+
+.status-upcoming {
+  color: var(--text-muted);
+}
+
+.schedule-calendar {
+  display: flex;
+  flex-direction: column;
+}
+
+.calendar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.calendar-nav {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.calendar-nav-btn {
+  padding: 0.35rem 0.7rem;
+}
+
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  grid-auto-rows: minmax(90px, 1fr);
+  gap: 6px;
+  flex: 1;
+}
+
+.calendar-day-label {
+  text-align: center;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+  padding-bottom: 0.5rem;
+}
+
+.calendar-cell {
+  background: #1a1e2b;
+  border: 1px solid #262b3a;
+  border-radius: 6px;
+  padding: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.calendar-cell-empty {
+  background: transparent;
+  border-color: transparent;
+}
+
+.calendar-cell-today {
+  background: rgba(61, 90, 254, 0.18);
+  border-color: var(--accent);
+}
+
+.calendar-cell-today .calendar-day-number {
+  color: var(--accent-soft);
+  font-weight: 700;
+}
+
+.calendar-day-number {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.calendar-chip {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: none;
+  border-radius: 3px;
+  padding: 0.2rem 0.35rem;
+  font-size: 0.65rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: default;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.calendar-chip-clickable {
+  cursor: pointer;
+}
+
+.calendar-chip-recorded {
+  background: rgba(61, 90, 254, 0.25);
+  color: var(--accent-soft);
+}
+
+.calendar-chip-needs-score {
+  background: rgba(242, 153, 74, 0.25);
+  color: var(--warning-text);
+  outline: 1px solid var(--warning-text);
+}
+
+.calendar-chip-upcoming {
+  background: var(--bg-panel-alt);
+  color: var(--text-muted);
+}
+
+/* Record results */
+.record-score-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.record-score-team {
+  font-weight: 700;
+  font-size: 1.1rem;
+  flex: 1;
+}
+
+.record-score-team-right {
+  text-align: right;
+}
+
+.record-score-boxes {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 1.2rem;
+  color: var(--text-muted);
+}
+
+.record-score-box {
+  min-width: 48px;
+  text-align: center;
+  background: var(--bg-panel-alt);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  padding: 0.4rem;
+  font-weight: 700;
+  color: white;
+}
+
+.record-roster-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+}
+
+.record-roster-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+  margin-bottom: 0.25rem;
+}
+
+.record-roster-hint {
+  font-size: 0.72rem;
+  color: var(--text-faint);
+  margin-bottom: 0.75rem;
+}
+
+.record-player-row {
+  grid-template-columns: 1.5rem 1fr 2.5rem auto 1.5rem auto;
+  gap: 0.6rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--row-divider);
+  font-size: 0.88rem;
+}
+
+.record-player-row-readonly {
+  grid-template-columns: 1.5rem 1fr 2.5rem auto;
+}
+
+.gameday-goals {
+  color: var(--success-text);
+  font-weight: 700;
+  font-size: 0.8rem;
+  text-align: right;
+}
+
+.gameday-mine-badge {
+  margin-left: 0.6rem;
+}
+
+.record-player-row:last-child {
+  border-bottom: none;
+}
+
+.record-player-row-active {
+  background: rgba(61, 90, 254, 0.1);
+  border-radius: 6px;
+}
+
+.record-player-number {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.record-player-name {
+  font-weight: 600;
+}
+
+.record-player-position {
+  color: var(--text-muted);
+  font-size: 0.7rem;
+}
+
+.stepper-btn {
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  background: var(--bg-panel-alt);
+  border: 1px solid var(--border-subtle);
+  color: white;
+  cursor: pointer;
+  font-size: 0.9rem;
+  line-height: 1;
+}
+
+.stepper-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.record-player-count {
+  text-align: center;
+  font-weight: 700;
+}
+
+/* Record success screen */
+.record-success {
+  max-width: 900px;
+  margin: 2.5rem auto 0;
+  text-align: center;
+}
+
+.record-success-icon {
+  margin: 0 auto 1.5rem;
+}
+
+.record-success-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 1.5rem;
+  text-align: left;
+  align-items: start;
+}
+
+.record-success-message .modal-title {
+  margin-bottom: 0.4rem;
+}
+
+.record-warning-box {
+  background: rgba(242, 153, 74, 0.1);
+  border: 1px solid var(--warning-text);
+  border-radius: 6px;
+  padding: 0.9rem;
+  margin-top: 1rem;
+  font-size: 0.8rem;
+  color: var(--warning-text);
+}
+
+.record-warning-item {
+  margin-top: 0.5rem;
+  color: var(--text-soft);
+}
+
+.record-success-score-box {
+  min-width: 220px;
+}
+
+.record-success-score-row {
+  display: flex;
+  justify-content: space-around;
+  margin: 0.75rem 0 1.25rem;
+  text-align: center;
+}
+
+.record-success-score-value {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.record-success-scorers {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  font-size: 0.85rem;
+}
+
+.record-success-scorers p {
+  margin-top: 0.35rem;
+  color: var(--text-soft);
+}
+
+.record-success-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-width: 200px;
+}

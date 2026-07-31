@@ -1,0 +1,461 @@
+/* Reusable UI primitives used across 3+ feature areas (panels, badges,
+   modals, buttons, form fields, tables). Feature-specific files below only
+   contain what's actually unique to that page. */
+
+/* Dark panel/card surfaces: background is always the same; radius/padding/
+   margin are genuinely different per context and stay in each feature file. */
+.panel,
+.generated-header,
+.notify-breadcrumb,
+.modal-card,
+.preview-box,
+.top-scorer-callout,
+.team-stat-row,
+.team-summary-stats {
+  background: var(--bg-panel);
+}
+
+.panel,
+.generated-header,
+.notify-breadcrumb,
+.modal-card {
+  color: white;
+}
+
+.panel {
+  border-radius: 8px;
+  padding: 1.5rem;
+}
+
+.panel-title {
+  font-size: 1.05rem;
+  margin-bottom: 1rem;
+}
+
+/* Uppercase "eyebrow" label text reused for panel option labels and table
+   column headers — size/border/spacing differ slightly per context. */
+.option-label,
+.player-table-head,
+.standings-head {
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.player-table-head {
+  font-size: 0.72rem;
+  border-bottom: 1px solid var(--divider-strong);
+  padding-bottom: 0.75rem;
+}
+
+/* Buttons */
+.pill-btn {
+  border: none;
+  border-radius: 999px;
+  padding: 0.7rem 1.5rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.pill-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.pill-btn-dark {
+  background: var(--bg-black);
+  color: white;
+}
+
+.pill-btn-light {
+  background: white;
+  color: var(--bg-black);
+}
+
+.pill-btn-blue {
+  background: var(--accent);
+  color: white;
+}
+
+.full-width {
+  width: 100%;
+  text-align: center;
+  border-radius: 6px;
+}
+
+.outline-btn {
+  background: none;
+  border: 1px solid var(--border-subtle);
+  color: white;
+  padding: 0.55rem 1.1rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.outline-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.outline-btn:not(:disabled):hover {
+  border-color: var(--accent);
+}
+
+.link-btn {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 0.9rem;
+  padding: 0.3rem 0;
+}
+
+.link-btn:hover {
+  color: white;
+}
+
+.toggle-pair {
+  display: flex;
+  background: var(--bg-panel-alt);
+  border-radius: 6px;
+  padding: 4px;
+  gap: 4px;
+}
+
+.toggle-btn {
+  flex: 1;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  padding: 0.5rem 0.75rem;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.toggle-btn.active {
+  background: var(--accent);
+  color: white;
+  font-weight: 600;
+}
+
+/* Form fields */
+.checkbox-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  margin-bottom: 0.9rem;
+  cursor: pointer;
+}
+
+.checkbox-row input {
+  margin-top: 0.2rem;
+  accent-color: var(--accent);
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.checkbox-title {
+  display: block;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.checkbox-description {
+  display: block;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin-top: 0.15rem;
+}
+
+/* Dark input-like fields share a background/border; the three text-entry
+   fields additionally share white text + a 6px radius, while token-btn
+   (smaller, dimmer, 4px radius, defined in teamGenerator.css) stays separate. */
+.select-input,
+.search-input,
+.message-textarea,
+.token-btn {
+  background: var(--bg-panel-alt);
+  border: 1px solid var(--border-subtle);
+}
+
+.select-input,
+.search-input,
+.message-textarea {
+  color: white;
+  border-radius: 6px;
+}
+
+.select-input {
+  width: 100%;
+  padding: 0.6rem 0.75rem;
+  font-size: 0.9rem;
+}
+
+.search-input {
+  padding: 0.5rem 0.9rem;
+  font-size: 0.85rem;
+  width: 220px;
+}
+
+/* Player table (reused verbatim by the team generator, league roster, and
+   manage-players tables) */
+.player-table {
+  max-height: 340px;
+  overflow-y: auto;
+}
+
+/* Grid-based "row" components: all share a two-property base, then diverge
+   on column template, gap, and padding, which genuinely differ per table —
+   those per-table specifics live in each feature's own stylesheet, except
+   player-table-row itself, which is reused identically in three places. */
+.player-table-row,
+.standings-row,
+.match-history-row,
+.team-player-row,
+.record-player-row,
+.player-manage-row,
+.roster-table-row {
+  display: grid;
+  align-items: center;
+}
+
+.player-table-row {
+  grid-template-columns: 1.4fr 1fr 1.4fr 0.6fr;
+  gap: 0.75rem;
+  padding: 0.6rem 0.25rem;
+}
+
+.player-table-body .player-table-row:not(:last-child) {
+  border-bottom: 1px solid var(--row-divider);
+}
+
+.player-name {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.players-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.players-panel-header .panel-title {
+  margin-bottom: 0;
+}
+
+.badge {
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.25rem 0.6rem;
+  border-radius: 4px;
+}
+
+.badge-midfielder,
+.badge-count {
+  background: rgba(61, 90, 254, 0.18);
+  color: var(--accent-soft);
+}
+
+.badge-forward {
+  background: rgba(239, 68, 68, 0.18);
+  color: #f28b8b;
+}
+
+.badge-defender {
+  background: rgba(34, 197, 94, 0.18);
+  color: #6ee0a0;
+}
+
+.badge-goalkeeper {
+  background: rgba(242, 153, 74, 0.18);
+  color: #f7b878;
+}
+
+.skill-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.skill-number {
+  font-size: 0.85rem;
+  font-weight: 600;
+  width: 1.2ch;
+}
+
+.skill-bar-track {
+  flex: 1;
+  max-width: 80px;
+  height: 5px;
+  background: var(--divider-strong);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.skill-bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+}
+
+.skill-bar-high {
+  background: var(--success-solid);
+}
+
+.skill-bar-mid {
+  background: var(--warning-solid);
+}
+
+.skill-bar-low {
+  background: var(--danger-solid);
+}
+
+/* Empty state */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 2.5rem 1.5rem;
+  gap: 0.4rem;
+}
+
+.empty-state-icon {
+  margin-bottom: 0.5rem;
+}
+
+.empty-state-title {
+  font-weight: 600;
+}
+
+.empty-state-subtitle {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  max-width: 40ch;
+}
+
+/* Stat value/label pairs reused across team cards, the results modal, and
+   the team summary card — size/case differ slightly per context. */
+.team-stat-value,
+.modal-stat-value,
+.team-summary-stat-value {
+  font-weight: 700;
+}
+
+.team-stat-label,
+.modal-stat-label,
+.team-summary-stat-label {
+  color: var(--text-muted);
+  letter-spacing: 0.03em;
+}
+
+/* Modal (generic Modal.jsx wrapper, reused by PublishedModal, SentModal,
+   PlayerAddedModal, and the record-results success screen) */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  z-index: 100;
+}
+
+.modal-card {
+  border-radius: 10px;
+  padding: 2.5rem;
+  max-width: 480px;
+  width: 100%;
+  text-align: center;
+}
+
+.modal-check-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 2px solid var(--success-solid);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 1rem;
+}
+
+.modal-status-badge {
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.3rem 0.75rem;
+  border-radius: 999px;
+  margin-bottom: 1rem;
+}
+
+.status-published,
+.status-sent {
+  background: rgba(34, 197, 94, 0.15);
+  color: var(--success-text);
+}
+
+.modal-title {
+  font-size: 1.4rem;
+  margin-bottom: 0.75rem;
+}
+
+.modal-description {
+  color: var(--text-dim);
+  font-size: 0.9rem;
+  margin-bottom: 1.5rem;
+}
+
+.modal-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+
+.modal-stat-tile {
+  background: var(--bg-panel-alt);
+  border-radius: 6px;
+  padding: 0.9rem 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.modal-stat-value {
+  font-size: 1.2rem;
+}
+
+.modal-stat-value-green {
+  color: var(--success-text);
+}
+
+.modal-stat-label {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+}
+
+.modal-breakdown {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin-bottom: 1.5rem;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: center;
+}

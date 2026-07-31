@@ -1,0 +1,79 @@
+@media (max-width: 900px) {
+  .hero-top {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .feature-row {
+    grid-template-columns: 1fr;
+  }
+
+  .feature-item:not(:last-child) {
+    border-right: none;
+    border-bottom: 1px solid #2a2a2a;
+  }
+
+  .generator-grid,
+  .notify-grid,
+  .league-grid,
+  .league-profile-grid,
+  .schedule-layout,
+  .record-roster-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .record-success-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .delivery-method-row {
+    grid-template-columns: 1fr;
+  }
+
+  .player-table-row {
+    grid-template-columns: 1.4fr 1fr 1fr 0.5fr;
+    font-size: 0.85rem;
+  }
+
+  .standings-row {
+    grid-template-columns: 0.4fr 1.6fr 0.5fr 0.5fr 0.5fr 0.5fr;
+    font-size: 0.85rem;
+  }
+
+  .standings-row span:nth-child(8) {
+    display: none;
+  }
+
+  .match-history-row {
+    grid-template-columns: 0.6fr 1.8fr 0.5fr 0.6fr;
+    font-size: 0.82rem;
+  }
+
+  .match-history-date,
+  .match-history-chevron {
+    display: none;
+  }
+}
+
+@media (max-width: 700px) {
+  .header-bar {
+    flex-wrap: wrap;
+  }
+
+  .nav {
+    order: 3;
+    width: 100%;
+    display: none;
+    flex-direction: column;
+    gap: 0.25rem;
+    margin-left: 0;
+  }
+
+  .nav.nav-open {
+    display: flex;
+  }
+
+  .banner {
+    flex-wrap: wrap;
+  }
+}

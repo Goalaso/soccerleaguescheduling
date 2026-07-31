@@ -1,0 +1,367 @@
+/* League Standings: tabs, standings table, top scorers, team/match history */
+
+.league-tabs {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.tab-btn {
+  background: none;
+  border: 1px solid var(--border-subtle);
+  color: var(--text-dim);
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.tab-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+  font-weight: 600;
+}
+
+.tab-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.league-grid {
+  display: grid;
+  grid-template-columns: 1fr 300px;
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.league-profile-grid {
+  display: grid;
+  grid-template-columns: 280px 1fr 280px;
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.league-breadcrumb-actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-left: auto;
+}
+
+/* Standings table */
+.standings-table {
+  display: flex;
+  flex-direction: column;
+}
+
+.standings-row {
+  grid-template-columns: 0.4fr 1.8fr 0.6fr 0.5fr 0.5fr 0.5fr 0.6fr 0.6fr 0.6fr;
+  gap: 0.5rem;
+  padding: 0.75rem 0.5rem;
+  border-radius: 6px;
+}
+
+.standings-head {
+  font-size: 0.72rem;
+  border-bottom: 1px solid var(--divider-strong);
+  margin-bottom: 0.25rem;
+}
+
+.standings-row-clickable {
+  cursor: pointer;
+}
+
+.standings-row-clickable:hover {
+  background: var(--bg-panel-alt);
+}
+
+.team-name-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-weight: 600;
+}
+
+.standings-pts {
+  font-weight: 700;
+}
+
+.gd-positive {
+  color: var(--success-text);
+}
+
+.save-confirmation {
+  color: var(--success-text);
+  font-weight: 600;
+  margin-bottom: 1rem;
+}
+
+.gd-negative {
+  color: var(--danger-text);
+}
+
+.standings-legend {
+  font-size: 0.72rem;
+  color: var(--text-faint);
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--divider-strong);
+}
+
+/* Top scorers */
+.top-scorer-row {
+  display: grid;
+  grid-template-columns: 1.2rem 1fr auto;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0;
+}
+
+.top-scorer-rank {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.top-scorer-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.top-scorer-team {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.top-scorer-goals {
+  font-weight: 700;
+  color: var(--success-text);
+}
+
+/* Next match */
+.next-match-teams {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin: 0.75rem 0 0.5rem;
+  font-weight: 600;
+}
+
+.next-match-vs {
+  color: var(--text-muted);
+  font-weight: 400;
+  font-size: 0.8rem;
+}
+
+/* Team summary card */
+.team-summary-header {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  margin-bottom: 1rem;
+}
+
+.team-summary-header h4 {
+  color: var(--team-color, var(--accent));
+}
+
+.team-summary-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--team-color, var(--accent));
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.team-summary-subtitle {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.team-summary-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.5rem;
+  border-radius: 6px;
+  padding: 0.75rem 0.25rem;
+  margin-bottom: 1rem;
+  text-align: center;
+}
+
+.league-profile-grid .team-summary-stats {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.team-summary-stats > div {
+  display: flex;
+  flex-direction: column;
+}
+
+.team-summary-stat-label {
+  font-size: 0.65rem;
+}
+
+.form-badge-row {
+  display: flex;
+  gap: 0.4rem;
+  margin: 0.5rem 0 1rem;
+}
+
+.form-badge {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.form-badge-w {
+  background: rgba(34, 197, 94, 0.2);
+  color: var(--success-text);
+}
+
+.form-badge-d {
+  background: rgba(242, 153, 74, 0.2);
+  color: var(--warning-text);
+}
+
+.form-badge-l {
+  background: rgba(239, 68, 68, 0.2);
+  color: var(--danger-text);
+}
+
+.team-summary-extra {
+  border-top: 1px solid #262a38;
+  padding-top: 0.75rem;
+}
+
+.team-summary-extra-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.85rem;
+  padding: 0.35rem 0;
+  color: var(--text-soft);
+}
+
+.top-scorer-callout {
+  border-radius: 6px;
+  padding: 1rem;
+}
+
+.top-scorer-callout-name {
+  font-weight: 700;
+  margin-top: 0.4rem;
+}
+
+.top-scorer-callout-position {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.top-scorer-callout-goals {
+  color: var(--success-text);
+  font-weight: 700;
+  margin-top: 0.3rem;
+}
+
+/* Match history */
+.match-history-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.match-history-row {
+  grid-template-columns: 0.7fr 2fr 0.5fr 0.7fr 0.7fr 0.3fr;
+  gap: 0.6rem;
+  padding: 0.75rem 0.25rem;
+  border-bottom: 1px solid var(--row-divider);
+  font-size: 0.88rem;
+}
+
+.match-history-row:last-child {
+  border-bottom: none;
+}
+
+.match-history-week {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.match-history-vs {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.match-history-score {
+  font-weight: 700;
+}
+
+.match-history-date {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.match-history-chevron {
+  color: var(--text-muted);
+  text-align: right;
+}
+
+/* Roster table (league profile) */
+.roster-table-row {
+  grid-template-columns: 1.6fr 1.2fr 0.6fr 0.6fr 0.6fr;
+}
+
+/* Skill by position */
+.skill-by-position-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.9rem;
+}
+
+.skill-by-position-label {
+  width: 90px;
+  flex-shrink: 0;
+  font-size: 0.85rem;
+}
+
+.skill-by-position-track {
+  max-width: none;
+}
+
+.skill-by-position-value {
+  width: 2ch;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+/* Position breakdown */
+.position-breakdown-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.4rem 0;
+}
+
+.position-breakdown-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.position-breakdown-label {
+  flex: 1;
+  font-size: 0.85rem;
+}
+
+.position-breakdown-count {
+  font-weight: 700;
+}

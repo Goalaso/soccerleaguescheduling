@@ -1,0 +1,404 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+:root {
+  --text-muted: #8b93a7;
+  --text-dim: #b3b9c9;
+  --text-soft: #d5d5d5;
+  --text-faint: #6b7386;
+  --accent: #3d5afe;
+  --accent-soft: #7c96ff;
+  --success-solid: #22c55e;
+  --success-text: #4ade80;
+  --warning-solid: #fbbf24;
+  --warning-text: #f2994a;
+  --danger-solid: #ef4444;
+  --danger-text: #f87171;
+  --bg-black: #0d0d0d;
+  --bg-panel: #12141c;
+  --bg-panel-alt: #1c1f2b;
+  --border-subtle: #2a2e3d;
+  --divider-strong: #22252f;
+  --row-divider: #1c1f29;
+}
+
+body {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  color: #1a1a1a;
+  background-color: #ececec;
+  line-height: 1.5;
+}
+
+button {
+  font-family: inherit;
+}
+
+.app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Header */
+.header {
+  background-color: var(--bg-black);
+  color: white;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.header-bar {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 0.6rem 1.5rem;
+}
+
+.hamburger-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0.5rem;
+}
+
+.hamburger-btn span {
+  width: 20px;
+  height: 2px;
+  background: white;
+  display: block;
+  border-radius: 2px;
+}
+
+.logo-badge {
+  background: none;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: white;
+  padding: 0.25rem;
+  text-decoration: none;
+}
+
+.logo-badge-text {
+  font-weight: 700;
+  font-size: 1.1rem;
+  letter-spacing: 0.5px;
+}
+
+.icon-svg {
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+}
+
+.nav {
+  display: flex;
+  gap: 2rem;
+  margin-left: 1rem;
+}
+
+.header-auth {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-left: auto;
+}
+
+.header-auth-name {
+  color: var(--text-dim);
+  font-size: 0.9rem;
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+.header-auth-name:hover {
+  color: white;
+}
+
+.nav-link {
+  background: none;
+  border: none;
+  color: #e5e5e5;
+  font-size: 0.95rem;
+  cursor: pointer;
+  padding: 0.4rem 0.2rem;
+  transition: color 0.2s ease;
+  text-decoration: none;
+  display: inline-block;
+}
+
+.nav-link:hover {
+  color: white;
+}
+
+.nav-link.active {
+  color: white;
+  font-weight: 600;
+  border-bottom: 2px solid var(--accent);
+}
+
+/* Banner */
+.banner {
+  background: linear-gradient(90deg, var(--accent) 0%, #4d6bff 100%);
+  color: white;
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  padding: 1.25rem 2rem;
+}
+
+.banner-badge {
+  background: white;
+  color: var(--bg-black);
+  border-radius: 50%;
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.banner-badge .icon-svg {
+  width: 60px;
+  height: 60px;
+}
+
+.banner-text {
+  flex: 1;
+}
+
+.banner-text h1 {
+  font-size: 1.4rem;
+  font-weight: 700;
+}
+
+.banner-text p {
+  font-size: 0.9rem;
+  opacity: 0.9;
+}
+
+/* Hero Card */
+.hero-card {
+  background: var(--bg-black);
+  color: white;
+  margin: 1.5rem;
+  border-radius: 4px;
+  padding: 2.5rem 2.5rem 0;
+}
+
+.hero-top {
+  display: flex;
+  gap: 2rem;
+  align-items: center;
+  padding-bottom: 2.5rem;
+}
+
+.hero-copy {
+  flex: 1;
+  min-width: 260px;
+}
+
+.hero-eyebrow {
+  color: #9aa5c0;
+  font-size: 0.9rem;
+  margin-bottom: 0.5rem;
+}
+
+.hero-copy h2 {
+  font-size: 2.4rem;
+  margin-bottom: 1rem;
+}
+
+.hero-body {
+  color: var(--text-soft);
+  margin-bottom: 1.75rem;
+  max-width: 30ch;
+}
+
+.hero-image {
+  flex: 1;
+  min-width: 280px;
+}
+
+/* Field graphic */
+.field-graphic {
+  position: relative;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #1c3a1c 35%;
+  aspect-ratio: 16 / 9;
+}
+
+.field {
+  position: absolute;
+  inset: 40% 6% 6% 6%;
+  background: repeating-linear-gradient(
+    90deg,
+    #2f8f3e 0%,
+    #2f8f3e 10%,
+    #368f45 10%,
+    #368f45 20%
+  );
+  border: 2px solid rgba(255, 255, 255, 0.85);
+  border-radius: 4px;
+}
+
+.field-line-h {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 2px;
+  background: rgba(255, 255, 255, 0.85);
+}
+
+.field-circle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 22%;
+  aspect-ratio: 1;
+  border: 2px solid rgba(255, 255, 255, 0.85);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.field-goal {
+  position: absolute;
+  top: 15%;
+  bottom: 15%;
+  width: 10%;
+  border: 2px solid rgba(255, 255, 255, 0.85);
+}
+
+.field-goal-left {
+  left: 0;
+  border-left: none;
+}
+
+.field-goal-right {
+  right: 0;
+  border-right: none;
+}
+
+.field-corner-badge {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  background: var(--accent);
+  color: white;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 0.35rem 0.6rem;
+  border-radius: 4px;
+  letter-spacing: 0.5px;
+}
+
+/* Feature row */
+.feature-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  border-top: 1px solid #2a2a2a;
+}
+
+.feature-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  background: none;
+  border: none;
+  color: white;
+  text-align: left;
+  cursor: pointer;
+  padding: 1.75rem 1.5rem;
+}
+
+.feature-item:not(:last-child) {
+  border-right: 1px solid #2a2a2a;
+}
+
+.feature-icon {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.feature-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.feature-title {
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.feature-arrow {
+  color: #9aa5c0;
+}
+
+.feature-description {
+  color: #b3b3b3;
+  font-size: 0.85rem;
+  max-width: 26ch;
+}
+
+/* Coming soon placeholder for other nav pages */
+.main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.coming-soon {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 3rem 2rem;
+}
+
+.coming-soon h2 {
+  color: var(--bg-black);
+  margin-bottom: 0.75rem;
+}
+
+.coming-soon p {
+  color: #555;
+}
+
+/* ===== Auth ===== */
+.auth-panel {
+  max-width: 420px;
+  margin: 0 auto;
+}
+
+.account-settings-panel {
+  margin-bottom: 2rem;
+}
+
+.auth-mode-toggle {
+  margin-bottom: 1.5rem;
+}
+
+.auth-panel input.select-input {
+  width: 100%;
+}
+
+.auth-loading {
+  padding: 3rem;
+  text-align: center;
+  color: var(--text-muted);
+}

@@ -1,0 +1,344 @@
+/* Team Generator: options panel, generated teams view, notify players */
+
+.generator-content {
+  padding: 1.5rem;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.generator-grid {
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.generator-main {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+/* Options panel */
+.option-group {
+  margin-bottom: 1.5rem;
+}
+
+.option-label {
+  display: block;
+  font-size: 0.75rem;
+  margin-bottom: 0.6rem;
+}
+
+.options-warning {
+  font-size: 0.8rem;
+  color: var(--warning-solid);
+  background: rgba(251, 191, 36, 0.1);
+  border-radius: 6px;
+  padding: 0.6rem 0.75rem;
+  margin-bottom: 1rem;
+}
+
+/* Generated teams */
+.generated-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+  border-radius: 8px;
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.generated-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.generated-heading .panel-title {
+  margin-bottom: 0;
+}
+
+.generated-subtitle {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.generated-actions {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.team-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1.25rem;
+}
+
+.team-card-v2 {
+  background: var(--bg-panel-alt);
+  border-radius: 8px;
+  padding: 1.25rem;
+  border-top: 3px solid var(--team-color, var(--accent));
+}
+
+.team-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.team-card-header h4 {
+  color: var(--team-color, var(--accent));
+}
+
+.team-avg-badge {
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.2rem 0.55rem;
+  border-radius: 4px;
+}
+
+.team-stat-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.5rem;
+  border-radius: 6px;
+  padding: 0.75rem 0.25rem;
+  margin-bottom: 1rem;
+}
+
+.team-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.team-stat-label {
+  font-size: 0.65rem;
+}
+
+.team-player-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-bottom: 1rem;
+}
+
+.team-player-row {
+  grid-template-columns: 1.3fr 1fr 1fr;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+}
+
+.team-balance-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  border-top: 1px solid #262a38;
+  padding-top: 0.75rem;
+}
+
+.balance-track {
+  max-width: none;
+}
+
+.balance-fill {
+  background: var(--accent);
+}
+
+/* Notify players */
+.notify-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  border-radius: 8px;
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.notify-breadcrumb-title {
+  font-weight: 700;
+}
+
+.notify-send-btn {
+  margin-left: auto;
+}
+
+.notify-grid {
+  display: grid;
+  grid-template-columns: 1fr 300px;
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.delivery-method-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+
+.delivery-card {
+  background: var(--bg-panel-alt);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.delivery-card.active {
+  border-color: var(--accent);
+  background: rgba(61, 90, 254, 0.1);
+}
+
+.delivery-card-title {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.delivery-card-sub {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.message-textarea {
+  width: 100%;
+  min-height: 140px;
+  padding: 0.9rem;
+  font-family: inherit;
+  font-size: 0.88rem;
+  resize: vertical;
+  margin-bottom: 0.5rem;
+}
+
+.message-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.token-buttons {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.token-btn {
+  color: var(--text-dim);
+  border-radius: 4px;
+  padding: 0.3rem 0.6rem;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.token-btn:hover {
+  border-color: var(--accent);
+  color: white;
+}
+
+.char-count {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.notify-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.sidebar-card {
+  padding: 1.25rem;
+}
+
+.send-to-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0;
+  cursor: pointer;
+}
+
+.team-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.send-to-name {
+  flex: 1;
+  font-size: 0.9rem;
+}
+
+.send-to-count {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.switch-input {
+  appearance: none;
+  width: 34px;
+  height: 18px;
+  background: var(--border-subtle);
+  border-radius: 999px;
+  position: relative;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.switch-input::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  background: white;
+  border-radius: 50%;
+  transition: left 0.15s ease;
+}
+
+.switch-input:checked {
+  background: var(--accent);
+}
+
+.switch-input:checked::after {
+  left: 18px;
+}
+
+.preview-box {
+  border-radius: 6px;
+  padding: 1rem;
+  font-size: 0.8rem;
+}
+
+.preview-from {
+  color: var(--text-muted);
+  margin-bottom: 0.75rem;
+}
+
+.preview-body {
+  color: var(--text-soft);
+  margin-bottom: 0.75rem;
+}
+
+.preview-link {
+  color: var(--accent-soft);
+}
