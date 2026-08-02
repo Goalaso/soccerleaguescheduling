@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { useAuth } from './AuthContext';
 import { useLeagues } from '../hooks/useLeagues';
 import { useSeasons } from '../hooks/useSeasons';
 
@@ -8,6 +9,7 @@ const SelectedSeasonContext = createContext(null);
 // so this Provider's state survives navigating between them) — picking a
 // league/season in one keeps it selected when you switch to the other.
 export function SelectedSeasonProvider({ children }) {
+  const { user } = useAuth();
   const { leagues, loading: leaguesLoading } = useLeagues();
   const [selectedLeagueId, setSelectedLeagueId] = useState(null);
   const [selectedSeasonId, setSelectedSeasonId] = useState(null);
@@ -17,7 +19,20 @@ export function SelectedSeasonProvider({ children }) {
     setSelectedLeagueId(leagues[0].id);
   }, [leaguesLoading, leagues, selectedLeagueId]);
 
-  const { seasons, loading: seasonsLoading } = useSeasons(selectedLeagueId);
+  const { seasons, loading: seasonsLoading, refetch: refetchSeasons } = useSeasons(selectedLeagueId);
+
+  // /api/seasons requires auth. This provider mounts app-wide, so it starts
+  // fetching immediately — including before the user has logged in (e.g.
+  // while still on /login), which 401s and leaves selectedSeasonId stuck at
+  // null with nothing to retry it. Re-fetch whenever login completes.
+  const wasLoggedIn = useRef(false);
+  useEffect(() => {
+    if (user && !wasLoggedIn.current) {
+      refetchSeasons();
+    }
+    wasLoggedIn.current = !!user;
+  }, [user, refetchSeasons]);
+
   const browsableSeasons = useMemo(
     () => seasons.filter((s) => s.status === 'teams_generated'),
     [seasons]
