@@ -1,26 +1,28 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiGet, apiPatch } from '../api/client';
 
 export function usePendingActions() {
-  const [actions, setActions] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+  const { data, isLoading, refetch } = useQuery({
+    queryKey: ['pendingActions'],
+    // A failed fetch (e.g. not authenticated) just means no pending items
+    // to show, not an error state — matches the original hook's behavior.
+    queryFn: () => apiGet('/me/pending-actions').then((d) => d.actions).catch(() => []),
+  });
 
-  const refetch = useCallback(() => {
-    setLoading(true);
-    return apiGet('/me/pending-actions')
-      .then((data) => setActions(data.actions))
-      .catch(() => setActions([]))
-      .finally(() => setLoading(false));
-  }, []);
+  const respondMutation = useMutation({
+    mutationFn: ({ seasonId, isAvailable }) =>
+      apiPatch(`/seasons/${seasonId}/availability/me`, { isAvailable }),
+    onSuccess: (_result, { seasonId }) => {
+      queryClient.setQueryData(['pendingActions'], (prev) =>
+        (prev || []).filter((a) => !(a.type === 'season_availability' && a.seasonId === seasonId))
+      );
+      queryClient.invalidateQueries({ queryKey: ['seasonAvailability', seasonId] });
+    },
+  });
 
-  useEffect(() => {
-    refetch();
-  }, [refetch]);
+  const respondToSeasonAvailability = (seasonId, isAvailable) =>
+    respondMutation.mutateAsync({ seasonId, isAvailable });
 
-  const respondToSeasonAvailability = useCallback(async (seasonId, isAvailable) => {
-    await apiPatch(`/seasons/${seasonId}/availability/me`, { isAvailable });
-    setActions((prev) => prev.filter((a) => !(a.type === 'season_availability' && a.seasonId === seasonId)));
-  }, []);
-
-  return { actions, loading, refetch, respondToSeasonAvailability };
+  return { actions: data || [], loading: isLoading, refetch, respondToSeasonAvailability };
 }

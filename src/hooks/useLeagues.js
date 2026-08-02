@@ -1,31 +1,23 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiGet, apiPatch } from '../api/client';
 
 export function useLeagues() {
-  const [leagues, setLeagues] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const queryClient = useQueryClient();
+  const { data, isLoading, error, refetch } = useQuery({
+    queryKey: ['leagues'],
+    queryFn: () => apiGet('/leagues'),
+  });
 
-  const refetch = useCallback(() => {
-    setLoading(true);
-    return apiGet('/leagues')
-      .then((data) => {
-        setLeagues(data);
-        setError(null);
-      })
-      .catch((err) => setError(err))
-      .finally(() => setLoading(false));
-  }, []);
+  const renameMutation = useMutation({
+    mutationFn: ({ id, name }) => apiPatch(`/leagues/${id}`, { name }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['leagues'] });
+      // Seasons embed a denormalized leagueName snapshot.
+      queryClient.invalidateQueries({ queryKey: ['seasons'] });
+    },
+  });
 
-  useEffect(() => {
-    refetch();
-  }, [refetch]);
+  const renameLeague = (id, name) => renameMutation.mutateAsync({ id, name });
 
-  const renameLeague = useCallback(async (id, name) => {
-    const updated = await apiPatch(`/leagues/${id}`, { name });
-    setLeagues((prev) => prev.map((l) => (l.id === id ? updated : l)));
-    return updated;
-  }, []);
-
-  return { leagues, loading, error, renameLeague, refetch };
+  return { leagues: data || [], loading: isLoading, error, renameLeague, refetch };
 }

@@ -1,34 +1,25 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiGet, apiPost } from '../api/client';
 
 export function useMatch(matchId) {
-  const [match, setMatch] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const queryClient = useQueryClient();
+  const { data, isLoading, error, refetch } = useQuery({
+    queryKey: ['match', matchId],
+    queryFn: () => apiGet(`/matches/${matchId}`),
+    enabled: !!matchId,
+  });
 
-  const refetch = useCallback(() => {
-    setLoading(true);
-    return apiGet(`/matches/${matchId}`)
-      .then((data) => {
-        setMatch(data);
-        setError(null);
-      })
-      .catch((err) => setError(err))
-      .finally(() => setLoading(false));
-  }, [matchId]);
-
-  useEffect(() => {
-    refetch();
-  }, [refetch]);
-
-  const submitResults = useCallback(
-    async (payload) => {
-      const updated = await apiPost(`/matches/${matchId}/results`, payload);
-      setMatch((prev) => ({ ...prev, ...updated }));
-      return updated;
+  const submitMutation = useMutation({
+    mutationFn: (payload) => apiPost(`/matches/${matchId}/results`, payload),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(['match', matchId], (prev) => ({ ...prev, ...updated }));
+      // Recording a result changes standings/schedule for every season's
+      // match list, not just this one match.
+      queryClient.invalidateQueries({ queryKey: ['matches'] });
     },
-    [matchId]
-  );
+  });
 
-  return { match, loading, error, refetch, submitResults };
+  const submitResults = (payload) => submitMutation.mutateAsync(payload);
+
+  return { match: data ?? null, loading: isLoading, error, refetch, submitResults };
 }

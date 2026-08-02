@@ -1,9 +1,11 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { apiGet, apiPost, apiPatch } from '../api/client';
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
+  const queryClient = useQueryClient();
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -23,27 +25,34 @@ export function AuthProvider({ children }) {
       .finally(() => setLoading(false));
   }, []);
 
+  // Every cached query (teams, matches, seasons, players, ...) is scoped to
+  // whoever's logged in — wipe it all on any identity change so a relogin
+  // (as the same or a different user) never shows stale/wrong data.
   const login = async (email, password) => {
     const data = await apiPost('/auth/login', { email, password });
     setUser(data.user);
+    queryClient.clear();
     return data.user;
   };
 
   const devLoginAsAdmin = async () => {
     const data = await apiPost('/auth/dev-login-admin');
     setUser(data.user);
+    queryClient.clear();
     return data.user;
   };
 
   const register = async (profile) => {
     const data = await apiPost('/auth/register', profile);
     setUser(data.user);
+    queryClient.clear();
     return data.user;
   };
 
   const logout = async () => {
     await apiPost('/auth/logout');
     setUser(null);
+    queryClient.clear();
   };
 
   const updateAccount = async (payload) => {

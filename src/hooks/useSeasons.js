@@ -1,34 +1,25 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiGet, apiPost } from '../api/client';
 
 // List of seasons, optionally scoped to one league — used by the season
-// dropdown and the SeasonsPage list.
+// dropdown and the SeasonsPage list. Different leagueId values (including
+// unscoped/null) get independent cache entries, so they can never clobber
+// each other's cached data.
 export function useSeasons(leagueId) {
-  const [seasons, setSeasons] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const queryClient = useQueryClient();
+  const { data, isLoading, error, refetch } = useQuery({
+    queryKey: ['seasons', leagueId ?? null],
+    queryFn: () => apiGet(leagueId ? `/seasons?leagueId=${leagueId}` : '/seasons'),
+  });
 
-  const refetch = useCallback(() => {
-    setLoading(true);
-    const query = leagueId ? `?leagueId=${leagueId}` : '';
-    return apiGet(`/seasons${query}`)
-      .then((data) => {
-        setSeasons(data);
-        setError(null);
-      })
-      .catch((err) => setError(err))
-      .finally(() => setLoading(false));
-  }, [leagueId]);
+  const createMutation = useMutation({
+    mutationFn: (payload) => apiPost('/seasons', payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['seasons'] });
+    },
+  });
 
-  useEffect(() => {
-    refetch();
-  }, [refetch]);
+  const createSeason = (payload) => createMutation.mutateAsync(payload);
 
-  const createSeason = useCallback(async (payload) => {
-    const season = await apiPost('/seasons', payload);
-    setSeasons((prev) => [season, ...prev]);
-    return season;
-  }, []);
-
-  return { seasons, loading, error, refetch, createSeason };
+  return { seasons: data || [], loading: isLoading, error, refetch, createSeason };
 }

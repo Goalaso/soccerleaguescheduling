@@ -1,31 +1,21 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiGet, apiPatch } from '../api/client';
 
 export function useMyProfile() {
-  const [profile, setProfile] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const queryClient = useQueryClient();
+  const { data, isLoading, error, refetch } = useQuery({
+    queryKey: ['myProfile'],
+    queryFn: () => apiGet('/players/me'),
+  });
 
-  const refetch = useCallback(() => {
-    setLoading(true);
-    return apiGet('/players/me')
-      .then((data) => {
-        setProfile(data);
-        setError(null);
-      })
-      .catch((err) => setError(err))
-      .finally(() => setLoading(false));
-  }, []);
+  const updateMutation = useMutation({
+    mutationFn: (payload) => apiPatch('/players/me', payload),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(['myProfile'], updated);
+    },
+  });
 
-  useEffect(() => {
-    refetch();
-  }, [refetch]);
+  const updateProfile = (payload) => updateMutation.mutateAsync(payload);
 
-  const updateProfile = useCallback(async (payload) => {
-    const updated = await apiPatch('/players/me', payload);
-    setProfile(updated);
-    return updated;
-  }, []);
-
-  return { profile, loading, error, refetch, updateProfile };
+  return { profile: data ?? null, loading: isLoading, error, refetch, updateProfile };
 }

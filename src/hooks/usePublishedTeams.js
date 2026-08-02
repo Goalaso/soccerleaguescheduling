@@ -1,43 +1,34 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiGet, apiPost } from '../api/client';
 
 export function usePublishedTeams(seasonId) {
-  const [teams, setTeams] = useState(null);
-  const [options, setOptions] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const queryClient = useQueryClient();
+  const { data, isLoading, error, refetch } = useQuery({
+    queryKey: ['publishedTeams', seasonId],
+    queryFn: () => apiGet(`/teams/published?seasonId=${seasonId}`),
+    enabled: !!seasonId,
+  });
 
-  const refetch = useCallback(() => {
-    if (!seasonId) {
-      setTeams(null);
-      setOptions(null);
-      setLoading(false);
-      return Promise.resolve();
-    }
-    setLoading(true);
-    return apiGet(`/teams/published?seasonId=${seasonId}`)
-      .then((data) => {
-        setTeams(data.teams);
-        setOptions(data.options);
-        setError(null);
-      })
-      .catch((err) => setError(err))
-      .finally(() => setLoading(false));
-  }, [seasonId]);
-
-  useEffect(() => {
-    refetch();
-  }, [refetch]);
-
-  const publish = useCallback(
-    async (nextTeams) => {
-      const data = await apiPost('/teams/publish', { seasonId, teams: nextTeams });
-      setTeams(data.teams);
-      setOptions(data.options);
-      return data;
+  const publishMutation = useMutation({
+    mutationFn: (nextTeams) => apiPost('/teams/publish', { seasonId, teams: nextTeams }),
+    onSuccess: (result) => {
+      queryClient.setQueryData(['publishedTeams', seasonId], result);
+      // Publishing flips the season's status, which the seasons list/detail
+      // and the season selector's browsable list both need to reflect.
+      queryClient.invalidateQueries({ queryKey: ['seasons'] });
+      queryClient.invalidateQueries({ queryKey: ['season', seasonId] });
+      queryClient.invalidateQueries({ queryKey: ['matches', seasonId] });
     },
-    [seasonId]
-  );
+  });
 
-  return { teams, options, loading, error, publish, refetch };
+  const publish = (nextTeams) => publishMutation.mutateAsync(nextTeams);
+
+  return {
+    teams: data?.teams ?? null,
+    options: data?.options ?? null,
+    loading: isLoading,
+    error,
+    publish,
+    refetch,
+  };
 }

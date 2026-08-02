@@ -1,38 +1,25 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiGet, apiPatch } from '../api/client';
 
 // Admin-facing availability review list for a season.
 export function useSeasonAvailability(seasonId) {
-  const [players, setPlayers] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const queryClient = useQueryClient();
+  const { data, isLoading, error, refetch } = useQuery({
+    queryKey: ['seasonAvailability', seasonId],
+    queryFn: () => apiGet(`/seasons/${seasonId}/availability`),
+    enabled: !!seasonId,
+  });
 
-  const refetch = useCallback(() => {
-    if (!seasonId) return Promise.resolve();
-    setLoading(true);
-    return apiGet(`/seasons/${seasonId}/availability`)
-      .then((data) => {
-        setPlayers(data);
-        setError(null);
-      })
-      .catch((err) => setError(err))
-      .finally(() => setLoading(false));
-  }, [seasonId]);
-
-  useEffect(() => {
-    refetch();
-  }, [refetch]);
-
-  const setAvailability = useCallback(
-    async (playerId, isAvailable) => {
-      const updated = await apiPatch(`/seasons/${seasonId}/availability/${playerId}`, { isAvailable });
-      setPlayers((prev) =>
-        prev.map((p) => (p.playerId === playerId ? { ...p, ...updated } : p))
-      );
-      return updated;
+  const setAvailabilityMutation = useMutation({
+    mutationFn: ({ playerId, isAvailable }) =>
+      apiPatch(`/seasons/${seasonId}/availability/${playerId}`, { isAvailable }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['seasonAvailability', seasonId] });
     },
-    [seasonId]
-  );
+  });
 
-  return { players, loading, error, refetch, setAvailability };
+  const setAvailability = (playerId, isAvailable) =>
+    setAvailabilityMutation.mutateAsync({ playerId, isAvailable });
+
+  return { players: data || [], loading: isLoading, error, refetch, setAvailability };
 }

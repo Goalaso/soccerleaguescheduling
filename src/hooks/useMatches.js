@@ -1,30 +1,12 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { apiGet } from '../api/client';
 
 export function useMatches(seasonId) {
-  const [matches, setMatches] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const { data, isLoading, error, refetch } = useQuery({
+    queryKey: ['matches', seasonId],
+    queryFn: () => apiGet(`/matches?seasonId=${seasonId}`),
+    enabled: !!seasonId,
+  });
 
-  const refetch = useCallback(() => {
-    if (!seasonId) {
-      setMatches(null);
-      setLoading(false);
-      return Promise.resolve();
-    }
-    setLoading(true);
-    return apiGet(`/matches?seasonId=${seasonId}`)
-      .then((data) => {
-        setMatches(data.matches);
-        setError(null);
-      })
-      .catch((err) => setError(err))
-      .finally(() => setLoading(false));
-  }, [seasonId]);
-
-  useEffect(() => {
-    refetch();
-  }, [refetch]);
-
-  return { matches, loading, error, refetch };
+  return { matches: data?.matches ?? null, loading: isLoading, error, refetch };
 }

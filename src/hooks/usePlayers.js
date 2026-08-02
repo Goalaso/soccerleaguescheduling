@@ -1,42 +1,31 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiGet, apiPost, apiPatch, apiDelete } from '../api/client';
 
 export function usePlayers() {
-  const [players, setPlayers] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const queryClient = useQueryClient();
+  const { data, isLoading, error, refetch } = useQuery({
+    queryKey: ['players'],
+    queryFn: () => apiGet('/players'),
+  });
 
-  const refetch = useCallback(() => {
-    setLoading(true);
-    return apiGet('/players')
-      .then((data) => {
-        setPlayers(data);
-        setError(null);
-      })
-      .catch((err) => setError(err))
-      .finally(() => setLoading(false));
-  }, []);
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['players'] });
 
-  useEffect(() => {
-    refetch();
-  }, [refetch]);
+  const createMutation = useMutation({
+    mutationFn: (payload) => apiPost('/players', payload),
+    onSuccess: invalidate,
+  });
+  const updateMutation = useMutation({
+    mutationFn: ({ id, payload }) => apiPatch(`/players/${id}`, payload),
+    onSuccess: invalidate,
+  });
+  const deleteMutation = useMutation({
+    mutationFn: (id) => apiDelete(`/players/${id}`),
+    onSuccess: invalidate,
+  });
 
-  const createPlayer = useCallback(async (payload) => {
-    const player = await apiPost('/players', payload);
-    setPlayers((prev) => [...prev, player]);
-    return player;
-  }, []);
+  const createPlayer = (payload) => createMutation.mutateAsync(payload);
+  const updatePlayer = (id, payload) => updateMutation.mutateAsync({ id, payload });
+  const deletePlayer = (id) => deleteMutation.mutateAsync(id);
 
-  const updatePlayer = useCallback(async (id, payload) => {
-    const player = await apiPatch(`/players/${id}`, payload);
-    setPlayers((prev) => prev.map((p) => (p.id === id ? player : p)));
-    return player;
-  }, []);
-
-  const deletePlayer = useCallback(async (id) => {
-    await apiDelete(`/players/${id}`);
-    setPlayers((prev) => prev.filter((p) => p.id !== id));
-  }, []);
-
-  return { players, loading, error, refetch, createPlayer, updatePlayer, deletePlayer };
+  return { players: data || [], loading: isLoading, error, refetch, createPlayer, updatePlayer, deletePlayer };
 }
