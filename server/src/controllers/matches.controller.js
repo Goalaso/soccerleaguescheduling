@@ -168,30 +168,42 @@ async function list(req, res, next) {
   }
 }
 
+// Match + scorers (fetchMatchById) plus both teams' current rosters — the
+// full shape the frontend expects from a single match. Shared by getOne and
+// recordResults so their responses are always shape-compatible: the client
+// merges a recordResults response into its cached getOne result
+// (`{ ...prev, ...updated }`), and a response missing `.players` would wipe
+// out the roster the UI still needs on the same render.
+async function fetchMatchWithRosters(db, matchId) {
+  const match = await fetchMatchById(db, matchId);
+  if (!match) return null;
+
+  const { rows: memberRows } = await db.query(
+    `SELECT tp.team_id, p.*
+     FROM team_players tp
+     JOIN players p ON p.id = tp.player_id
+     WHERE tp.team_id = ANY($1::int[])
+     ORDER BY p.id ASC`,
+    [[match.home.id, match.away.id]]
+  );
+
+  const rosterByTeam = memberRows.reduce((acc, row) => {
+    (acc[row.team_id] ||= []).push(playerToApiShape(row));
+    return acc;
+  }, {});
+
+  return {
+    ...match,
+    home: { ...match.home, players: rosterByTeam[match.home.id] || [] },
+    away: { ...match.away, players: rosterByTeam[match.away.id] || [] },
+  };
+}
+
 async function getOne(req, res, next) {
   try {
-    const match = await fetchMatchById(pool, req.params.id);
+    const match = await fetchMatchWithRosters(pool, req.params.id);
     if (!match) return res.status(404).json({ error: 'Match not found' });
-
-    const { rows: memberRows } = await pool.query(
-      `SELECT tp.team_id, p.*
-       FROM team_players tp
-       JOIN players p ON p.id = tp.player_id
-       WHERE tp.team_id = ANY($1::int[])
-       ORDER BY p.id ASC`,
-      [[match.home.id, match.away.id]]
-    );
-
-    const rosterByTeam = memberRows.reduce((acc, row) => {
-      (acc[row.team_id] ||= []).push(playerToApiShape(row));
-      return acc;
-    }, {});
-
-    res.json({
-      ...match,
-      home: { ...match.home, players: rosterByTeam[match.home.id] || [] },
-      away: { ...match.away, players: rosterByTeam[match.away.id] || [] },
-    });
+    res.json(match);
   } catch (err) {
     next(err);
   }
@@ -268,9 +280,16 @@ async function recordResults(req, res, next) {
       );
     }
 
+    // A submitted score fully resolves the "needs a score" reminder —
+    // delete rather than mark read, since the match is now permanently
+    // 'played' and the lazy check can never re-add it for this match.
+    await client.query(`DELETE FROM notifications WHERE type = 'match_needs_score' AND related_match_id = $1`, [
+      match.id,
+    ]);
+
     await client.query('COMMIT');
 
-    const updated = await fetchMatchById(pool, match.id);
+    const updated = await fetchMatchWithRosters(pool, match.id);
     res.json(updated);
   } catch (err) {
     await client.query('ROLLBACK');

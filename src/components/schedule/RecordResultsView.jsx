@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useMatch } from '../../hooks/useMatch';
-import { formatMatchDate } from '../../utils/season';
+import { formatMatchDate, isMatchOverdue } from '../../utils/season';
 
 const POSITION_ABBR = {
   Goalkeeper: 'GK',
@@ -111,23 +111,24 @@ function RecordResultsView({ matches, onResultsSaved }) {
   };
 
   if (saved) {
-    const otherPending = (matches || []).filter((m) => m.id !== match.id && m.status === 'scheduled');
+    const otherPending = (matches || []).filter((m) => m.id !== match.id && isMatchOverdue(m));
 
     return (
       <div className="record-success">
-        <div className="modal-check-icon record-success-icon">
-          <svg viewBox="0 0 24 24" width="30" height="30" fill="none">
-            <path
-              d="M5 13l4 4L19 7"
-              stroke="#22c55e"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        </div>
+        <div className="panel record-success-panel">
+          <div className="modal-check-icon record-success-icon">
+            <svg viewBox="0 0 24 24" width="30" height="30" fill="none">
+              <path
+                d="M5 13l4 4L19 7"
+                stroke="#22c55e"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </div>
 
-        <div className="record-success-grid">
+          <div className="record-success-grid">
           <div className="record-success-message">
             <h3 className="modal-title">Results Saved!</h3>
             <p className="generated-subtitle">
@@ -153,7 +154,7 @@ function RecordResultsView({ matches, onResultsSaved }) {
             )}
           </div>
 
-          <div className="panel record-success-score-box">
+          <div className="record-success-score-box">
             <span className="option-label">Final Score</span>
             <div className="record-success-score-row">
               <div>
@@ -203,6 +204,7 @@ function RecordResultsView({ matches, onResultsSaved }) {
               View Standings
             </button>
           </div>
+        </div>
         </div>
       </div>
     );

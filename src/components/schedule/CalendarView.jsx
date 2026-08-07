@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { formatMatchDate } from '../../utils/season';
+import { formatMatchDate, isMatchOverdue } from '../../utils/season';
 
 const DAY_LABELS = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
 
@@ -9,10 +9,7 @@ function shortName(name) {
 
 function statusOf(match) {
   if (match.status === 'played') return 'recorded';
-  const matchDate = new Date(match.matchDate);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return matchDate <= today ? 'needs-score' : 'upcoming';
+  return isMatchOverdue(match) ? 'needs-score' : 'upcoming';
 }
 
 function CalendarView({ matches, showAll, filterTeamId, onSelectMatch }) {

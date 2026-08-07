@@ -73,11 +73,14 @@ async function create(req, res, next) {
   try {
     await client.query('BEGIN');
 
-    const { rows: leagueRows } = await client.query('SELECT id FROM leagues WHERE id = $1', [leagueId]);
+    const { rows: leagueRows } = await client.query('SELECT id, name FROM leagues WHERE id = $1', [
+      leagueId,
+    ]);
     if (!leagueRows[0]) {
       await client.query('ROLLBACK');
       return res.status(400).json({ error: 'Invalid leagueId' });
     }
+    const leagueName = leagueRows[0].name;
 
     const { rows: seasonRows } = await client.query(
       `INSERT INTO seasons
@@ -99,12 +102,24 @@ async function create(req, res, next) {
     const seasonId = seasonRows[0].id;
 
     // Seed one availability row per player currently in this league — this
-    // is the "ask" from the user's flow, realized as in-app pending state
-    // (no real notification delivery exists in this app).
+    // is the "ask" from the user's flow.
     await client.query(
       `INSERT INTO season_availability (season_id, player_id)
        SELECT $1, pl.player_id FROM player_leagues pl WHERE pl.league_id = $2`,
       [seasonId, leagueId]
+    );
+
+    // Notify each of those players (only ones with a real login account —
+    // notifications.user_id has no meaning for an admin-added player with
+    // no account yet).
+    const seasonLabel = name || `a new ${leagueName} season`;
+    await client.query(
+      `INSERT INTO notifications (user_id, type, message, related_season_id)
+       SELECT p.user_id, 'season_availability_request', $2, $1
+       FROM season_availability sa
+       JOIN players p ON p.id = sa.player_id
+       WHERE sa.season_id = $1 AND p.user_id IS NOT NULL`,
+      [seasonId, `Are you available to play in ${seasonLabel} (${leagueName})?`]
     );
 
     await client.query('COMMIT');
@@ -169,6 +184,17 @@ async function setAvailability(req, res, next) {
     if (!rows[0]) {
       return res.status(404).json({ error: "Player is not part of this season's availability list" });
     }
+
+    // An admin override also resolves the player's own pending ask, if
+    // they have an account to have received one.
+    await pool.query(
+      `UPDATE notifications n SET is_read = true
+       FROM players p
+       WHERE p.id = $1 AND n.user_id = p.user_id
+         AND n.type = 'season_availability_request' AND n.related_season_id = $2`,
+      [req.params.playerId, req.params.id]
+    );
+
     res.json({ playerId: rows[0].player_id, isAvailable: rows[0].is_available, respondedAt: rows[0].responded_at });
   } catch (err) {
     next(err);
@@ -194,6 +220,13 @@ async function setMyAvailability(req, res, next) {
     if (!rows[0]) {
       return res.status(404).json({ error: "You are not part of this season's availability list" });
     }
+
+    await pool.query(
+      `UPDATE notifications SET is_read = true
+       WHERE user_id = $1 AND type = 'season_availability_request' AND related_season_id = $2`,
+      [req.user.sub, req.params.id]
+    );
+
     res.json({ playerId: rows[0].player_id, isAvailable: rows[0].is_available, respondedAt: rows[0].responded_at });
   } catch (err) {
     next(err);

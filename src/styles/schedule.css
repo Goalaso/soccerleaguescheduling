@@ -341,6 +341,10 @@
   text-align: center;
 }
 
+.record-success-panel {
+  padding: 2.5rem;
+}
+
 .record-success-icon {
   margin: 0 auto 1.5rem;
 }
@@ -373,6 +377,9 @@
 }
 
 .record-success-score-box {
+  background: var(--bg-panel-alt);
+  border-radius: 6px;
+  padding: 1rem;
   min-width: 220px;
 }
 

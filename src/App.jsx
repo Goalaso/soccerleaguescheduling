@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import Header from './components/Header';
 import HomePage from './components/HomePage';
+import NotificationsHistoryPage from './components/NotificationsHistoryPage';
 import SeasonsPage from './components/SeasonsPage';
 import LeaguePage from './components/LeaguePage';
 import SchedulePage from './components/SchedulePage';
@@ -21,8 +22,23 @@ function App() {
       <main className="main-content">
         <SelectedSeasonProvider>
           <Routes>
-            <Route path="/" element={<HomePage />} />
+            <Route
+              path="/"
+              element={
+                <RequireAuth>
+                  <HomePage />
+                </RequireAuth>
+              }
+            />
             <Route path="/login" element={<AuthPage />} />
+            <Route
+              path="/notifications"
+              element={
+                <RequireAuth>
+                  <NotificationsHistoryPage />
+                </RequireAuth>
+              }
+            />
             <Route
               path="/schedule/*"
               element={

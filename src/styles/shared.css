@@ -232,6 +232,19 @@
   padding: 0.6rem 0.25rem;
 }
 
+/* Grid items default to min-width: auto, which can force badges/skill-bars
+   to hold their content's width instead of shrinking with the track —
+   this escape hatch lets every column actually respect its fr size. */
+.player-table-row > *,
+.standings-row > *,
+.match-history-row > *,
+.team-player-row > *,
+.record-player-row > *,
+.player-manage-row > *,
+.roster-table-row > * {
+  min-width: 0;
+}
+
 .player-table-body .player-table-row:not(:last-child) {
   border-bottom: 1px solid var(--row-divider);
 }
@@ -379,6 +392,8 @@
   padding: 2.5rem;
   max-width: 480px;
   width: 100%;
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
   text-align: center;
 }
 

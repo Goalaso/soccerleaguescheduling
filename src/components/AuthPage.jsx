@@ -79,7 +79,7 @@ function AuthPage() {
         title={mode === 'login' ? 'Log In' : 'Create Account'}
         subtitle="Boeing Indoor Soccer League"
       />
-      <div className="generator-content">
+      <div className="generator-content auth-page-content">
         <div className="panel auth-panel">
           <div className="toggle-pair auth-mode-toggle">
             <button

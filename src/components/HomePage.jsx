@@ -6,12 +6,13 @@ import ChartIcon from './icons/ChartIcon';
 import FieldGraphic from './FieldGraphic';
 import FeatureItem from './FeatureItem';
 import PageBanner from './PageBanner';
-import PendingActionsPanel from './PendingActionsPanel';
-import { useAuth } from '../context/AuthContext';
+import NotificationsPanel from './NotificationsPanel';
+import { useNotifications } from '../hooks/useNotifications';
 
 function HomePage() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { notifications } = useNotifications();
+  const hasNotifications = notifications.length > 0;
 
   return (
     <>
@@ -22,24 +23,29 @@ function HomePage() {
         onAction={() => navigate('/schedule')}
       />
 
-      {user && (
-        <div className="generator-content">
-          <PendingActionsPanel />
-        </div>
-      )}
+      <div className="generator-content">
+        <NotificationsPanel />
+      </div>
 
       <section className="hero-card">
         <div className="hero-top">
           <div className="hero-copy">
-            <p className="hero-eyebrow">New Season</p>
-            <h2>Action Needed</h2>
-            <p className="hero-body">
-              Please proceed to the Team Generator to create teams!
-            </p>
-            <button
-              className="pill-btn pill-btn-light"
-              onClick={() => navigate('/seasons')}
-            >
+            {hasNotifications ? (
+              <>
+                <p className="hero-eyebrow">
+                  {notifications.length} update{notifications.length === 1 ? '' : 's'}
+                </p>
+                <h2>Action Needed</h2>
+                <p className="hero-body">Check the list above to respond.</p>
+              </>
+            ) : (
+              <>
+                <p className="hero-eyebrow">All caught up</p>
+                <h2>Welcome back</h2>
+                <p className="hero-body">Nothing needs your attention right now.</p>
+              </>
+            )}
+            <button className="pill-btn pill-btn-light" onClick={() => navigate('/seasons')}>
               View Seasons
             </button>
           </div>

@@ -18,7 +18,9 @@
   .league-grid,
   .league-profile-grid,
   .schedule-layout,
-  .record-roster-grid {
+  .record-roster-grid,
+  .player-form-grid,
+  .player-form-row {
     grid-template-columns: 1fr;
   }
 
@@ -35,11 +37,29 @@
     font-size: 0.85rem;
   }
 
-  .standings-row {
-    grid-template-columns: 0.4fr 1.6fr 0.5fr 0.5fr 0.5fr 0.5fr;
+  /* Higher specificity than the bare .player-table-row rule above (both
+     classes are always present together on these rows), so these win
+     regardless of source order and don't get silently clobbered back to
+     the 4-column template. */
+  .player-table-row.roster-table-row {
+    grid-template-columns: 1.3fr 1fr 0.5fr 0.5fr 0.5fr;
     font-size: 0.85rem;
   }
 
+  .player-table-row.player-manage-row {
+    grid-template-columns: 1.3fr 1fr 0.5fr 1.1fr 0.9fr;
+    font-size: 0.85rem;
+  }
+
+  /* 9 visible cells (#, Team, MP, W, D, L, GD, GF, PTS) need to match the
+     explicit track count or the extras land in broken implicit columns —
+     hide GD and GF here so 7 visible cells map to 7 tracks. */
+  .standings-row {
+    grid-template-columns: 0.4fr 1.6fr 0.5fr 0.5fr 0.5fr 0.5fr 0.6fr;
+    font-size: 0.85rem;
+  }
+
+  .standings-row span:nth-child(7),
   .standings-row span:nth-child(8) {
     display: none;
   }
@@ -75,5 +95,243 @@
 
   .banner {
     flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 480px) {
+  .header-bar {
+    padding: 0.5rem 1rem;
+    gap: 1rem;
+  }
+
+  .logo-badge-text {
+    font-size: 1rem;
+  }
+
+  .hamburger-btn {
+    min-width: 44px;
+    min-height: 44px;
+    justify-content: center;
+  }
+
+  .nav .nav-link {
+    padding: 0.75rem 0.5rem;
+  }
+
+  .header-auth-name {
+    max-width: 45vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .banner {
+    padding: 1rem 1.25rem;
+    gap: 1rem;
+  }
+
+  .banner-badge {
+    width: 40px;
+    height: 40px;
+  }
+
+  .banner-badge .icon-svg {
+    width: 48px;
+    height: 48px;
+  }
+
+  .banner-text h1 {
+    font-size: 1.15rem;
+  }
+
+  .banner-text p {
+    font-size: 0.8rem;
+  }
+
+  .hero-card {
+    margin: 1rem;
+    padding: 1.75rem 1.5rem 0;
+  }
+
+  .hero-copy,
+  .hero-image {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .hero-copy h2 {
+    font-size: 1.6rem;
+  }
+
+  .hero-body {
+    max-width: none;
+  }
+
+  .generator-content {
+    padding: 1rem;
+  }
+
+  .panel {
+    padding: 1.25rem;
+  }
+
+  .players-panel-header {
+    flex-wrap: wrap;
+  }
+
+  .search-input {
+    width: 100%;
+  }
+
+  /* Notifications (homepage panel + full history page) */
+  .notification-row {
+    flex-wrap: wrap;
+  }
+
+  .notification-message {
+    flex: 1 1 100%;
+  }
+
+  .notification-buttons {
+    flex: 1 1 100%;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .notification-icon-btn {
+    width: 40px;
+    height: 40px;
+  }
+
+  /* Modal (Published/Sent/PlayerAdded modals, all via Modal.jsx) */
+  .modal-card {
+    padding: 1.5rem;
+  }
+
+  .modal-stat-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .modal-actions {
+    flex-wrap: wrap;
+  }
+
+  .modal-actions .pill-btn,
+  .modal-actions .outline-btn {
+    flex: 1 1 100%;
+  }
+
+  /* Manage Players */
+  .link-btn {
+    padding: 0.5rem 0.4rem;
+  }
+
+  .player-table-row.player-manage-row {
+    grid-template-columns: 1.2fr 0.9fr 0.5fr 1fr 0.8fr;
+    font-size: 0.78rem;
+  }
+
+  /* League */
+  .player-table-row.roster-table-row {
+    grid-template-columns: 1.2fr 0.9fr 0.5fr 0.5fr 0.5fr;
+    font-size: 0.78rem;
+  }
+
+  /* Down to 6 visible cells (#, Team, W, D, L, PTS) — hide MP too now
+     that space is even tighter than the 900px breakpoint. */
+  .standings-row {
+    grid-template-columns: 0.3fr 1.6fr 0.5fr 0.5fr 0.5fr 0.6fr;
+    font-size: 0.78rem;
+    gap: 0.35rem;
+  }
+
+  .standings-row span:nth-child(3) {
+    display: none;
+  }
+
+  /* Seasons */
+  .season-selector {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .season-selector .select-input {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .season-row {
+    flex-wrap: wrap;
+  }
+
+  .toggle-pair {
+    flex-wrap: wrap;
+  }
+
+  .availability-check {
+    width: 40px;
+    height: 40px;
+  }
+
+  /* Schedule: the 7-column month grid can't fit a phone screen readably —
+     the sidebar's Needs Score/Upcoming match-card list (already built,
+     already mobile-friendly) becomes the mobile schedule view instead. */
+  .schedule-calendar {
+    display: none;
+  }
+
+  .record-success-panel {
+    padding: 1.25rem;
+  }
+
+  .record-success-score-box,
+  .record-success-actions {
+    min-width: 0;
+  }
+
+  .record-player-row {
+    grid-template-columns: 1.2rem 1fr 2.2rem 32px 1.2rem 32px;
+    gap: 0.4rem;
+    font-size: 0.8rem;
+  }
+
+  .record-player-row-readonly {
+    grid-template-columns: 1.2rem 1fr 2.2rem 1.2rem;
+  }
+
+  .record-player-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .stepper-btn {
+    width: 32px;
+    height: 32px;
+  }
+
+  /* Team Generator */
+  .team-player-row {
+    grid-template-columns: 1.4fr 0.8fr 0.8fr;
+    gap: 0.35rem;
+    font-size: 0.78rem;
+  }
+
+  .generated-actions {
+    flex-wrap: wrap;
+  }
+
+  .switch-input {
+    width: 40px;
+    height: 22px;
+  }
+
+  .switch-input::after {
+    width: 18px;
+    height: 18px;
+  }
+
+  .switch-input:checked::after {
+    left: 20px;
   }
 }

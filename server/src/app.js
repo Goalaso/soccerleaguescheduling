@@ -8,7 +8,7 @@ const teamsRoutes = require('./routes/teams.routes');
 const leaguesRoutes = require('./routes/leagues.routes');
 const matchesRoutes = require('./routes/matches.routes');
 const seasonsRoutes = require('./routes/seasons.routes');
-const meRoutes = require('./routes/me.routes');
+const notificationsRoutes = require('./routes/notifications.routes');
 const errorHandler = require('./middleware/errorHandler');
 
 const app = express();
@@ -30,7 +30,7 @@ app.use('/api/teams', teamsRoutes);
 app.use('/api/leagues', leaguesRoutes);
 app.use('/api/matches', matchesRoutes);
 app.use('/api/seasons', seasonsRoutes);
-app.use('/api/me', meRoutes);
+app.use('/api/notifications', notificationsRoutes);
 
 app.use(errorHandler);
 

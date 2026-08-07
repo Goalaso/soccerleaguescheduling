@@ -380,8 +380,14 @@ button {
 }
 
 /* ===== Auth ===== */
+.auth-page-content {
+  align-items: center;
+  justify-content: center;
+}
+
 .auth-panel {
-  max-width: 420px;
+  width: 100%;
+  max-width: 480px;
   margin: 0 auto;
 }
 

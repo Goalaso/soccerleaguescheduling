@@ -117,3 +117,13 @@ export function matchResultLetter(match, teamId) {
 export function formatMatchDate(date) {
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
+
+// A scheduled match only genuinely "needs a score" once its date has
+// passed — a future scheduled match isn't overdue, just not played yet.
+export function isMatchOverdue(match) {
+  if (match.status !== 'scheduled') return false;
+  const matchDate = new Date(match.matchDate);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return matchDate <= today;
+}

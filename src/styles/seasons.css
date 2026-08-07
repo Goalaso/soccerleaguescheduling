@@ -1,4 +1,4 @@
-/* Seasons: list/create, availability review, homepage pending-actions panel */
+/* Seasons: list/create, availability review, homepage notifications panel */
 
 .season-selector {
   display: flex;
@@ -63,11 +63,11 @@
   border-color: var(--success-solid);
 }
 
-.pending-actions-panel {
+.notifications-panel {
   margin-bottom: 1.5rem;
 }
 
-.pending-action-row {
+.notification-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -76,12 +76,39 @@
   border-bottom: 1px solid var(--row-divider);
 }
 
-.pending-action-row:last-child {
+.notification-row:last-child {
   border-bottom: none;
 }
 
-.pending-action-buttons {
+.notification-row-read {
+  opacity: 0.55;
+}
+
+.notifications-view-all {
+  display: inline-block;
+  margin-top: 0.75rem;
+}
+
+.notification-buttons {
   display: flex;
+  align-items: center;
   gap: 0.6rem;
   flex-shrink: 0;
+}
+
+.notification-icon-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-panel-alt);
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.85rem;
+  line-height: 1;
+}
+
+.notification-icon-btn:hover {
+  color: white;
+  border-color: var(--accent);
 }
