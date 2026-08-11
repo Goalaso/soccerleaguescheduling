@@ -106,6 +106,26 @@
   border-color: var(--accent);
 }
 
+.danger-zone {
+  margin-top: 1.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--divider-strong);
+}
+
+.danger-zone .option-label {
+  color: var(--danger-text);
+}
+
+.danger-outline-btn {
+  color: var(--danger-text);
+  border-color: var(--danger-solid);
+}
+
+.danger-outline-btn:not(:disabled):hover {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: var(--danger-solid);
+}
+
 .link-btn {
   background: none;
   border: none;
@@ -117,6 +137,14 @@
 
 .link-btn:hover {
   color: white;
+}
+
+.link-btn-danger {
+  color: var(--danger-text);
+}
+
+.link-btn-danger:hover {
+  color: var(--danger-solid);
 }
 
 .toggle-pair {
@@ -234,7 +262,12 @@
 
 /* Grid items default to min-width: auto, which can force badges/skill-bars
    to hold their content's width instead of shrinking with the track —
-   this escape hatch lets every column actually respect its fr size. */
+   this escape hatch lets every column actually respect its fr size. Letting
+   the track shrink isn't enough on its own though: an unbreakable word
+   (e.g. "Goalkeeper") still won't wrap, so on a narrow-enough track it
+   overflows and visibly overlaps the next column instead of being clipped —
+   overflow/ellipsis here is what actually stops that, not just min-width.
+*/
 .player-table-row > *,
 .standings-row > *,
 .match-history-row > *,
@@ -243,6 +276,9 @@
 .player-manage-row > *,
 .roster-table-row > * {
   min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .player-table-body .player-table-row:not(:last-child) {
@@ -268,6 +304,11 @@
 
 .badge {
   display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
   font-size: 0.75rem;
   font-weight: 600;
   padding: 0.25rem 0.6rem;

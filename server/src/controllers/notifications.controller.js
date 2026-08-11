@@ -16,28 +16,31 @@ function toApiShape(row) {
 // System-detected condition, not tied to any single admin action: a
 // scheduled match's date has passed with no recorded score yet. Lazily
 // checked on read (same pattern as the lazy schedule generation in
-// matches.controller.js) rather than needing a scheduler — the dedup index
-// on (user_id, type, related_match_id) means this is safe to run on every
-// admin request; it only inserts for matches that don't already have one.
+// matches.controller.js) rather than needing a scheduler.
+//
+// This is an upsert, not an insert-if-missing: it unconditionally ensures
+// an *unread* notification exists for every still-overdue match, self-
+// healing anything that's stuck read (match_needs_score is actionable —
+// see notificationTypes.js on the client — so nothing should ever leave it
+// read without also deleting it, but this guards against stale rows from
+// before that rule existed, or any future code path that breaks it). The
+// partial unique index on (user_id, type, related_match_id) is what makes
+// ON CONFLICT ... DO UPDATE target the right row instead of duplicating.
 async function ensureAdminSystemNotifications(client, adminUserId) {
   const { rows: overdueMatches } = await client.query(
     `SELECT m.id, m.week, ht.name AS home_name, at.name AS away_name
      FROM matches m
      JOIN teams ht ON ht.id = m.home_team_id
      JOIN teams at ON at.id = m.away_team_id
-     WHERE m.status = 'scheduled' AND m.match_date < now()
-       AND NOT EXISTS (
-         SELECT 1 FROM notifications n
-         WHERE n.user_id = $1 AND n.type = 'match_needs_score' AND n.related_match_id = m.id
-       )`,
-    [adminUserId]
+     WHERE m.status = 'scheduled' AND m.match_date < now()`
   );
 
   for (const m of overdueMatches) {
     await client.query(
       `INSERT INTO notifications (user_id, type, message, action_url, related_match_id)
        VALUES ($1, 'match_needs_score', $2, $3, $4)
-       ON CONFLICT DO NOTHING`,
+       ON CONFLICT (user_id, type, related_match_id) WHERE related_match_id IS NOT NULL
+       DO UPDATE SET is_read = false, message = EXCLUDED.message, action_url = EXCLUDED.action_url`,
       [
         adminUserId,
         `${m.home_name} vs ${m.away_name} (week ${m.week}) needs a score`,

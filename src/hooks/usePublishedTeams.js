@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { apiGet, apiPost } from '../api/client';
+import { apiGet, apiPost, apiDelete, apiPatch } from '../api/client';
 
 export function usePublishedTeams(seasonId) {
   const queryClient = useQueryClient();
@@ -9,10 +9,14 @@ export function usePublishedTeams(seasonId) {
     enabled: !!seasonId,
   });
 
+  const applyTeamsUpdate = (result) => {
+    queryClient.setQueryData(['publishedTeams', seasonId], result);
+  };
+
   const publishMutation = useMutation({
     mutationFn: (nextTeams) => apiPost('/teams/publish', { seasonId, teams: nextTeams }),
     onSuccess: (result) => {
-      queryClient.setQueryData(['publishedTeams', seasonId], result);
+      applyTeamsUpdate(result);
       // Publishing flips the season's status, which the seasons list/detail
       // and the season selector's browsable list both need to reflect.
       queryClient.invalidateQueries({ queryKey: ['seasons'] });
@@ -21,7 +25,32 @@ export function usePublishedTeams(seasonId) {
     },
   });
 
+  // Season-long roster changes (permanent, unlike a single-match loan) —
+  // each returns the full refreshed team list, same shape as publish.
+  const addPlayerMutation = useMutation({
+    mutationFn: ({ teamId, playerId }) => apiPost(`/teams/${teamId}/players`, { playerId }),
+    onSuccess: applyTeamsUpdate,
+  });
+  const removePlayerMutation = useMutation({
+    mutationFn: ({ teamId, playerId }) => apiDelete(`/teams/${teamId}/players/${playerId}`),
+    onSuccess: applyTeamsUpdate,
+  });
+  const movePlayerMutation = useMutation({
+    mutationFn: ({ teamId, playerId, toTeamId }) =>
+      apiPost(`/teams/${teamId}/players/${playerId}/move`, { toTeamId }),
+    onSuccess: applyTeamsUpdate,
+  });
+  const setCaptainMutation = useMutation({
+    mutationFn: ({ teamId, playerId }) => apiPatch(`/teams/${teamId}/captain`, { playerId }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['publishedTeams', seasonId] }),
+  });
+
   const publish = (nextTeams) => publishMutation.mutateAsync(nextTeams);
+  const addSeasonPlayer = (teamId, playerId) => addPlayerMutation.mutateAsync({ teamId, playerId });
+  const removeSeasonPlayer = (teamId, playerId) => removePlayerMutation.mutateAsync({ teamId, playerId });
+  const moveSeasonPlayer = (teamId, playerId, toTeamId) =>
+    movePlayerMutation.mutateAsync({ teamId, playerId, toTeamId });
+  const setCaptain = (teamId, playerId) => setCaptainMutation.mutateAsync({ teamId, playerId });
 
   return {
     teams: data?.teams ?? null,
@@ -30,5 +59,9 @@ export function usePublishedTeams(seasonId) {
     error,
     publish,
     refetch,
+    addSeasonPlayer,
+    removeSeasonPlayer,
+    moveSeasonPlayer,
+    setCaptain,
   };
 }

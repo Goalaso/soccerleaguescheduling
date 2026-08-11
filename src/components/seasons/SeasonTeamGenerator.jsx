@@ -10,7 +10,7 @@ import SentModal from '../teamGenerator/SentModal';
 import { useSeason } from '../../hooks/useSeason';
 import { useSeasonAvailability } from '../../hooks/useSeasonAvailability';
 import { usePublishedTeams } from '../../hooks/usePublishedTeams';
-import { generateTeams, summarizeBalance } from '../../utils/generateTeams';
+import { generateTeams, summarizeBalance, summarizeTeam } from '../../utils/generateTeams';
 
 const DEFAULT_MESSAGE =
   "Hi {first_name}, your team for this season has been announced! You've been assigned to {team_name}. View your full team roster and schedule at the link below.";
@@ -94,6 +94,44 @@ function SeasonTeamGenerator({ onPublished }) {
   const playerCount = teams ? teams.reduce((sum, t) => sum + t.players.length, 0) : 0;
   const balance = teams ? summarizeBalance(teams) : null;
 
+  // Pre-publish editing is pure local state — nothing's persisted until
+  // "Save & Publish" sends whatever split is currently in `teams`.
+  const assignedIds = new Set((teams || []).flatMap((t) => t.players.map((p) => p.id)));
+  const unassignedPlayers = eligiblePlayers.filter((p) => !assignedIds.has(p.id));
+
+  const handleMovePlayer = (playerId, fromTeamId, toTeamId) => {
+    setTeams((prev) => {
+      const fromTeam = prev.find((t) => t.id === fromTeamId);
+      const player = fromTeam?.players.find((p) => p.id === playerId);
+      if (!player) return prev;
+      return prev.map((t) => {
+        if (t.id === fromTeamId) {
+          return summarizeTeam({ ...t, players: t.players.filter((p) => p.id !== playerId) });
+        }
+        if (t.id === toTeamId) {
+          return summarizeTeam({ ...t, players: [...t.players, player] });
+        }
+        return t;
+      });
+    });
+  };
+
+  const handleRemovePlayer = (playerId, teamId) => {
+    setTeams((prev) =>
+      prev.map((t) =>
+        t.id === teamId ? summarizeTeam({ ...t, players: t.players.filter((p) => p.id !== playerId) }) : t
+      )
+    );
+  };
+
+  const handleAddPlayer = (playerId, teamId) => {
+    setTeams((prev) => {
+      const player = eligiblePlayers.find((p) => p.id === playerId);
+      if (!player) return prev;
+      return prev.map((t) => (t.id === teamId ? summarizeTeam({ ...t, players: [...t.players, player] }) : t));
+    });
+  };
+
   const toggleDeliveryMethod = (method) => setDeliveryMethods((prev) => ({ ...prev, [method]: !prev[method] }));
   const toggleTeam = (teamId) => setTeamToggles((prev) => ({ ...prev, [teamId]: !prev[teamId] }));
 
@@ -164,8 +202,12 @@ function SeasonTeamGenerator({ onPublished }) {
                   playerCount={playerCount}
                   isPublished={isPublished}
                   publishError={publishError}
+                  unassignedPlayers={unassignedPlayers}
                   onRegenerate={() => navigate(basePath)}
                   onPublish={handleSaveAndPublish}
+                  onMovePlayer={handleMovePlayer}
+                  onRemovePlayer={handleRemovePlayer}
+                  onAddPlayer={handleAddPlayer}
                 />
               ) : (
                 <Navigate to={basePath} replace />

@@ -1,12 +1,19 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import ConfirmPasswordModal from '../ConfirmPasswordModal';
 
 function statusLabel(status) {
   return status === 'collecting_availability' ? 'Collecting Availability' : 'Teams Generated';
 }
 
-function SeasonsListView({ seasons, loading }) {
+function SeasonsListView({ seasons, loading, deleteSeason }) {
   const navigate = useNavigate();
+  const [pendingDelete, setPendingDelete] = useState(null);
+
+  const handleConfirmDelete = async (password) => {
+    await deleteSeason(pendingDelete.id, password);
+    setPendingDelete(null);
+  };
 
   return (
     <div className="panel seasons-panel">
@@ -47,9 +54,26 @@ function SeasonsListView({ seasons, loading }) {
                   View Standings
                 </button>
               )}
+              <button
+                type="button"
+                className="link-btn link-btn-danger"
+                onClick={() => setPendingDelete(s)}
+              >
+                Delete
+              </button>
             </div>
           ))}
         </div>
+      )}
+
+      {pendingDelete && (
+        <ConfirmPasswordModal
+          title="Delete Season"
+          description={`This permanently deletes "${pendingDelete.name}" and all of its teams, matches, and results. This cannot be undone.`}
+          confirmLabel="Delete Season"
+          onConfirm={handleConfirmDelete}
+          onClose={() => setPendingDelete(null)}
+        />
       )}
     </div>
   );

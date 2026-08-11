@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import ConfirmPasswordModal from '../ConfirmPasswordModal';
 
 const POSITION_CLASS = {
   Midfielder: 'badge-midfielder',
@@ -10,10 +11,11 @@ const POSITION_CLASS = {
 
 function PlayerListView({ players, loading, deletePlayer }) {
   const navigate = useNavigate();
+  const [pendingDelete, setPendingDelete] = useState(null);
 
-  const handleDelete = async (player) => {
-    if (!window.confirm(`Remove ${player.name} from the roster?`)) return;
-    await deletePlayer(player.id);
+  const handleConfirmDelete = async (password) => {
+    await deletePlayer(pendingDelete.id, password);
+    setPendingDelete(null);
   };
 
   return (
@@ -49,7 +51,11 @@ function PlayerListView({ players, loading, deletePlayer }) {
                   <button className="link-btn" onClick={() => navigate(`/players/edit/${p.id}`)}>
                     Edit
                   </button>
-                  <button className="link-btn" onClick={() => handleDelete(p)}>
+                  <button
+                    type="button"
+                    className="link-btn link-btn-danger"
+                    onClick={() => setPendingDelete(p)}
+                  >
                     Delete
                   </button>
                 </span>
@@ -57,6 +63,16 @@ function PlayerListView({ players, loading, deletePlayer }) {
             ))}
           </div>
         </div>
+      )}
+
+      {pendingDelete && (
+        <ConfirmPasswordModal
+          title="Delete Player"
+          description={`This permanently removes ${pendingDelete.name} from the roster.`}
+          confirmLabel="Delete Player"
+          onConfirm={handleConfirmDelete}
+          onClose={() => setPendingDelete(null)}
+        />
       )}
     </div>
   );

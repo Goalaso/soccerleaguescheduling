@@ -52,6 +52,7 @@ async function fetchSeasonTeams(client, seasonId) {
       id: t.id,
       name: t.name,
       color: t.color,
+      captainPlayerId: t.captain_player_id,
       players: membersByTeam[t.id] || [],
     })
   );
@@ -152,4 +153,209 @@ async function publish(req, res, next) {
   }
 }
 
-module.exports = { getPublished, publish };
+// Games played per player for a season, straight from match_rosters — every
+// played match is guaranteed a roster row (backfilled for old matches,
+// materialized on submit for new ones), so no fallback logic is needed here
+// the way fetchEffectiveRoster needs it for a single in-progress match.
+// Excludes rows for matches that haven't been played yet (a confirmed
+// roll call for an upcoming match isn't a "game played").
+async function getStats(req, res, next) {
+  try {
+    const { seasonId } = req.query;
+    if (!seasonId) {
+      return res.status(400).json({ error: 'seasonId is required' });
+    }
+    const { rows } = await pool.query(
+      `SELECT mr.player_id, COUNT(*)::int AS games_played
+       FROM match_rosters mr
+       JOIN matches m ON m.id = mr.match_id
+       WHERE m.season_id = $1 AND m.status = 'played'
+       GROUP BY mr.player_id`,
+      [seasonId]
+    );
+    res.json(rows.map((r) => ({ playerId: r.player_id, gamesPlayed: r.games_played })));
+  } catch (err) {
+    next(err);
+  }
+}
+
+// Season-long roster changes (distinct from a single-match loan in
+// match_rosters) notify the affected player if they have a login — same
+// directly-triggered pattern as season_availability_request, except
+// related_season_id is deliberately left NULL: a player could legitimately
+// be moved more than once in a season, and the dedup index on
+// (user_id, type, related_season_id) would block a second real
+// notification. Team/action context goes in `data` JSONB instead.
+async function notifyRosterChange(db, playerId, team, action) {
+  const messages = {
+    added: `You've been added to ${team.name}`,
+    removed: `You've been removed from ${team.name}`,
+    moved: `You've been moved to ${team.name}`,
+  };
+  await db.query(
+    `INSERT INTO notifications (user_id, type, message, action_url, data)
+     SELECT p.user_id, 'team_roster_changed', $2, $3, $4
+     FROM players p WHERE p.id = $1 AND p.user_id IS NOT NULL`,
+    [
+      playerId,
+      messages[action],
+      `/league/team/${team.id}`,
+      JSON.stringify({ teamId: team.id, teamName: team.name, action }),
+    ]
+  );
+}
+
+async function addSeasonPlayer(req, res, next) {
+  const { playerId } = req.body;
+  if (!playerId) {
+    return res.status(400).json({ error: 'playerId is required' });
+  }
+  try {
+    const { rows: teamRows } = await pool.query('SELECT * FROM teams WHERE id = $1', [req.params.teamId]);
+    const team = teamRows[0];
+    if (!team) return res.status(404).json({ error: 'Team not found' });
+
+    // A season-long spot, unlike a match_rosters loan — a player can only
+    // be on one team's permanent roster per season.
+    const { rows: conflictRows } = await pool.query(
+      `SELECT 1 FROM team_players tp JOIN teams t ON t.id = tp.team_id
+       WHERE t.season_id = $1 AND tp.player_id = $2`,
+      [team.season_id, playerId]
+    );
+    if (conflictRows.length) {
+      return res.status(409).json({ error: 'That player is already on a team this season' });
+    }
+
+    await pool.query('INSERT INTO team_players (team_id, player_id) VALUES ($1, $2)', [team.id, playerId]);
+    await notifyRosterChange(pool, playerId, team, 'added');
+
+    const result = await fetchSeasonTeams(pool, team.season_id);
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function removeSeasonPlayer(req, res, next) {
+  try {
+    const { rows: teamRows } = await pool.query('SELECT * FROM teams WHERE id = $1', [req.params.teamId]);
+    const team = teamRows[0];
+    if (!team) return res.status(404).json({ error: 'Team not found' });
+
+    const { rowCount } = await pool.query('DELETE FROM team_players WHERE team_id = $1 AND player_id = $2', [
+      team.id,
+      req.params.playerId,
+    ]);
+    if (!rowCount) return res.status(404).json({ error: 'Player not on this team' });
+
+    // Removing their season-long spot also clears them as captain, if they
+    // were one — teams.captain_player_id has no meaning once they're not
+    // even on the roster anymore.
+    await pool.query('UPDATE teams SET captain_player_id = NULL WHERE id = $1 AND captain_player_id = $2', [
+      team.id,
+      req.params.playerId,
+    ]);
+    await notifyRosterChange(pool, req.params.playerId, team, 'removed');
+
+    const result = await fetchSeasonTeams(pool, team.season_id);
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function moveSeasonPlayer(req, res, next) {
+  const { toTeamId } = req.body;
+  if (!toTeamId) {
+    return res.status(400).json({ error: 'toTeamId is required' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const { rows: teamRows } = await client.query('SELECT * FROM teams WHERE id = ANY($1::int[]) FOR UPDATE', [
+      [Number(req.params.teamId), Number(toTeamId)],
+    ]);
+    const fromTeam = teamRows.find((t) => t.id === Number(req.params.teamId));
+    const toTeam = teamRows.find((t) => t.id === Number(toTeamId));
+    if (!fromTeam || !toTeam) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Team not found' });
+    }
+    if (fromTeam.season_id !== toTeam.season_id) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Both teams must be in the same season' });
+    }
+
+    const { rows: existingRows } = await client.query(
+      'SELECT score FROM team_players WHERE team_id = $1 AND player_id = $2',
+      [fromTeam.id, req.params.playerId]
+    );
+    if (!existingRows.length) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Player not on this team' });
+    }
+
+    await client.query('DELETE FROM team_players WHERE team_id = $1 AND player_id = $2', [
+      fromTeam.id,
+      req.params.playerId,
+    ]);
+    await client.query('INSERT INTO team_players (team_id, player_id, score) VALUES ($1, $2, $3)', [
+      toTeam.id,
+      req.params.playerId,
+      existingRows[0].score,
+    ]);
+    // Same reasoning as removeSeasonPlayer — captaincy doesn't carry over
+    // to whichever team they've moved to.
+    await client.query('UPDATE teams SET captain_player_id = NULL WHERE id = $1 AND captain_player_id = $2', [
+      fromTeam.id,
+      req.params.playerId,
+    ]);
+
+    await client.query('COMMIT');
+
+    await notifyRosterChange(pool, req.params.playerId, toTeam, 'moved');
+    const result = await fetchSeasonTeams(pool, fromTeam.season_id);
+    res.json(result);
+  } catch (err) {
+    await client.query('ROLLBACK');
+    next(err);
+  } finally {
+    client.release();
+  }
+}
+
+async function setCaptain(req, res, next) {
+  const { playerId } = req.body;
+  try {
+    const { rows: teamRows } = await pool.query('SELECT * FROM teams WHERE id = $1', [req.params.id]);
+    const team = teamRows[0];
+    if (!team) return res.status(404).json({ error: 'Team not found' });
+
+    if (playerId !== null && playerId !== undefined) {
+      const { rows: onRoster } = await pool.query(
+        'SELECT 1 FROM team_players WHERE team_id = $1 AND player_id = $2',
+        [team.id, playerId]
+      );
+      if (!onRoster.length) {
+        return res.status(400).json({ error: "Captain must be on the team's roster" });
+      }
+    }
+
+    await pool.query('UPDATE teams SET captain_player_id = $1 WHERE id = $2', [playerId ?? null, team.id]);
+    res.status(204).end();
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = {
+  getPublished,
+  publish,
+  getStats,
+  addSeasonPlayer,
+  removeSeasonPlayer,
+  moveSeasonPlayer,
+  setCaptain,
+};

@@ -56,9 +56,14 @@ function SchedulePage() {
               path="match/:id"
               element={
                 isAdmin ? (
-                  <RecordResultsView matches={matches} onResultsSaved={refetch} />
+                  <RecordResultsView
+                    matches={matches}
+                    teams={teams}
+                    seasonId={selectedSeasonId}
+                    onResultsSaved={refetch}
+                  />
                 ) : (
-                  <GameDayView myTeamId={myTeam?.id} />
+                  <GameDayView myTeamId={myTeam?.id} teams={teams} />
                 )
               }
             />

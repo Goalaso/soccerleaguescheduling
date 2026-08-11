@@ -19,12 +19,12 @@ async function fetchMatchesForSeason(db, seasonId) {
   const goalRows = matchIds.length
     ? (
         await db.query(
-          `SELECT mg.match_id, mg.player_id, mg.team_id, mg.goals, p.name AS player_name,
+          `SELECT mr.match_id, mr.player_id, mr.team_id, mr.goals, p.name AS player_name,
                   t.name AS team_name, t.color AS team_color
-           FROM match_goals mg
-           JOIN players p ON p.id = mg.player_id
-           JOIN teams t ON t.id = mg.team_id
-           WHERE mg.match_id = ANY($1::int[])`,
+           FROM match_rosters mr
+           JOIN players p ON p.id = mr.player_id
+           JOIN teams t ON t.id = mr.team_id
+           WHERE mr.match_id = ANY($1::int[]) AND mr.goals > 0`,
           [matchIds]
         )
       ).rows
@@ -70,11 +70,11 @@ async function fetchMatchById(db, matchId) {
   if (!m) return null;
 
   const { rows: goalRows } = await db.query(
-    `SELECT mg.player_id, mg.team_id, mg.goals, p.name AS player_name, t.name AS team_name, t.color AS team_color
-     FROM match_goals mg
-     JOIN players p ON p.id = mg.player_id
-     JOIN teams t ON t.id = mg.team_id
-     WHERE mg.match_id = $1`,
+    `SELECT mr.player_id, mr.team_id, mr.goals, p.name AS player_name, t.name AS team_name, t.color AS team_color
+     FROM match_rosters mr
+     JOIN players p ON p.id = mr.player_id
+     JOIN teams t ON t.id = mr.team_id
+     WHERE mr.match_id = $1 AND mr.goals > 0`,
     [matchId]
   );
 
@@ -168,34 +168,78 @@ async function list(req, res, next) {
   }
 }
 
-// Match + scorers (fetchMatchById) plus both teams' current rosters — the
-// full shape the frontend expects from a single match. Shared by getOne and
-// recordResults so their responses are always shape-compatible: the client
-// merges a recordResults response into its cached getOne result
+// A match's real roster for a given team: whatever's been recorded in
+// match_rosters (a roll call, a sub/borrow assignment, an in-game swap —
+// they're all just rows in this table). If nobody's touched it yet, this
+// falls back to the season-long team_players roster, so the feature is
+// opt-in — a match nobody did a roll call for still works exactly like it
+// did before match_rosters existed.
+async function fetchEffectiveRoster(db, matchId, teamId) {
+  const { rows } = await db.query(
+    `SELECT mr.player_id, mr.source, mr.goals, p.*
+     FROM match_rosters mr
+     JOIN players p ON p.id = mr.player_id
+     WHERE mr.match_id = $1 AND mr.team_id = $2
+     ORDER BY p.id ASC`,
+    [matchId, teamId]
+  );
+  if (rows.length) return rows;
+
+  const { rows: fallbackRows } = await db.query(
+    `SELECT tp.player_id, 'regular' AS source, 0 AS goals, p.*
+     FROM team_players tp
+     JOIN players p ON p.id = tp.player_id
+     WHERE tp.team_id = $1
+     ORDER BY p.id ASC`,
+    [teamId]
+  );
+  return fallbackRows;
+}
+
+// Turns the read-side fallback above into real rows, the first time anyone
+// actually edits a team's match-day roster (a roll call, a sub/borrow
+// assignment, or recording a score with nobody having done either first).
+// Needed before any add/remove: e.g. unchecking someone from a roll call
+// that hasn't started yet is a DELETE against a row that doesn't exist
+// until the rest of the team's regular roster is materialized alongside it.
+async function materializeRosterIfEmpty(db, matchId, teamId) {
+  const { rows: existing } = await db.query(
+    'SELECT 1 FROM match_rosters WHERE match_id = $1 AND team_id = $2 LIMIT 1',
+    [matchId, teamId]
+  );
+  if (existing.length) return;
+  await db.query(
+    `INSERT INTO match_rosters (match_id, team_id, player_id, source)
+     SELECT $1, team_id, player_id, 'regular' FROM team_players WHERE team_id = $2`,
+    [matchId, teamId]
+  );
+}
+
+// Match + scorers (fetchMatchById) plus both teams' effective match-day
+// roster — the full shape the frontend expects from a single match. Shared
+// by getOne and recordResults so their responses are always shape-compatible:
+// the client merges a recordResults response into its cached getOne result
 // (`{ ...prev, ...updated }`), and a response missing `.players` would wipe
 // out the roster the UI still needs on the same render.
 async function fetchMatchWithRosters(db, matchId) {
   const match = await fetchMatchById(db, matchId);
   if (!match) return null;
 
-  const { rows: memberRows } = await db.query(
-    `SELECT tp.team_id, p.*
-     FROM team_players tp
-     JOIN players p ON p.id = tp.player_id
-     WHERE tp.team_id = ANY($1::int[])
-     ORDER BY p.id ASC`,
-    [[match.home.id, match.away.id]]
-  );
-
-  const rosterByTeam = memberRows.reduce((acc, row) => {
-    (acc[row.team_id] ||= []).push(playerToApiShape(row));
-    return acc;
-  }, {});
+  const [homeRoster, awayRoster] = await Promise.all([
+    fetchEffectiveRoster(db, matchId, match.home.id),
+    fetchEffectiveRoster(db, matchId, match.away.id),
+  ]);
 
   return {
     ...match,
-    home: { ...match.home, players: rosterByTeam[match.home.id] || [] },
-    away: { ...match.away, players: rosterByTeam[match.away.id] || [] },
+    home: {
+      ...match.home,
+      players: homeRoster.map((row) => ({ ...playerToApiShape(row), source: row.source })),
+    },
+    away: {
+      ...match.away,
+      players: awayRoster.map((row) => ({ ...playerToApiShape(row), source: row.source })),
+    },
   };
 }
 
@@ -241,10 +285,17 @@ async function recordResults(req, res, next) {
       return res.status(400).json({ error: 'Scorer team must be one of the two match teams' });
     }
 
+    // Lock in "who played" permanently at the moment a score is submitted,
+    // for whichever team hasn't had a roll call/sub assignment yet — a
+    // later season-long roster move can then never retroactively rewrite
+    // this match's history. No-op if match_rosters already has rows here.
+    await materializeRosterIfEmpty(client, match.id, homeTeamId);
+    await materializeRosterIfEmpty(client, match.id, awayTeamId);
+
     if (cleanScorers.length) {
       const { rows: rosterRows } = await client.query(
-        'SELECT team_id, player_id FROM team_players WHERE team_id = ANY($1::int[])',
-        [[homeTeamId, awayTeamId]]
+        'SELECT team_id, player_id FROM match_rosters WHERE match_id = $1 AND team_id = ANY($2::int[])',
+        [match.id, [homeTeamId, awayTeamId]]
       );
       const rosterSet = new Set(rosterRows.map((r) => `${r.team_id}:${r.player_id}`));
       const invalidPlayer = cleanScorers.find((s) => !rosterSet.has(`${s.teamId}:${s.playerId}`));
@@ -272,12 +323,17 @@ async function recordResults(req, res, next) {
       [homeGoals, awayGoals, req.user.sub, match.id]
     );
 
-    await client.query('DELETE FROM match_goals WHERE match_id = $1', [match.id]);
+    // Every scorer's match_rosters row is guaranteed to already exist (they
+    // just passed roster validation above), so this is reset-then-update,
+    // never delete-then-insert — it's not possible to end up with a goal
+    // credited to someone who isn't on the roster.
+    await client.query('UPDATE match_rosters SET goals = 0 WHERE match_id = $1', [match.id]);
     for (const s of cleanScorers) {
-      await client.query(
-        'INSERT INTO match_goals (match_id, player_id, team_id, goals) VALUES ($1, $2, $3, $4)',
-        [match.id, s.playerId, s.teamId, s.goals]
-      );
+      await client.query('UPDATE match_rosters SET goals = $1 WHERE match_id = $2 AND player_id = $3', [
+        s.goals,
+        match.id,
+        s.playerId,
+      ]);
     }
 
     // A submitted score fully resolves the "needs a score" reminder —
@@ -299,4 +355,133 @@ async function recordResults(req, res, next) {
   }
 }
 
-module.exports = { list, getOne, recordResults };
+// Admins can edit either team's match-day roster with any source. A team
+// captain can only confirm/unconfirm their own team's *regular* roster
+// players — assigning subs/borrowed players, or touching the other team,
+// is admin-only (matches the real workflow: captains report attendance,
+// the admin is the one who fills gaps).
+async function canEditMatchRoster(db, user, teamId) {
+  if (user.role === 'admin') return { allowed: true, captainOnly: false };
+  const { rows } = await db.query(
+    `SELECT 1 FROM teams t JOIN players p ON p.id = t.captain_player_id
+     WHERE t.id = $1 AND p.user_id = $2`,
+    [teamId, user.sub]
+  );
+  return { allowed: !!rows[0], captainOnly: true };
+}
+
+const ROSTER_SOURCES = ['regular', 'sub', 'borrowed'];
+
+async function addRosterEntry(req, res, next) {
+  const { playerId, teamId } = req.body;
+  const source = req.body.source || 'regular';
+
+  if (!playerId || !teamId) {
+    return res.status(400).json({ error: 'playerId and teamId are required' });
+  }
+  if (!ROSTER_SOURCES.includes(source)) {
+    return res.status(400).json({ error: 'Invalid source' });
+  }
+
+  try {
+    const { rows: matchRows } = await pool.query('SELECT * FROM matches WHERE id = $1', [req.params.id]);
+    const match = matchRows[0];
+    if (!match) return res.status(404).json({ error: 'Match not found' });
+    if (teamId !== match.home_team_id && teamId !== match.away_team_id) {
+      return res.status(400).json({ error: 'teamId must be one of the two match teams' });
+    }
+
+    const perm = await canEditMatchRoster(pool, req.user, teamId);
+    if (!perm.allowed) return res.status(403).json({ error: 'Forbidden' });
+
+    if (perm.captainOnly) {
+      if (source !== 'regular') {
+        return res
+          .status(403)
+          .json({ error: "Captains can only confirm attendance for their own team's regular roster" });
+      }
+      const { rows: onRoster } = await pool.query(
+        'SELECT 1 FROM team_players WHERE team_id = $1 AND player_id = $2',
+        [teamId, playerId]
+      );
+      if (!onRoster.length) {
+        return res.status(403).json({ error: "That player is not on your team's roster" });
+      }
+    }
+
+    // Re-adding a previously-unchecked regular player (or adding a sub/
+    // borrowed player) onto a roster nobody's touched yet needs the rest of
+    // the team's regular roster materialized first, same reasoning as below.
+    await materializeRosterIfEmpty(pool, req.params.id, teamId);
+
+    // A player can only be on one side of a match — the PK enforces this,
+    // but check first for a clear error instead of a raw constraint violation.
+    const { rows: existingRows } = await pool.query(
+      'SELECT team_id FROM match_rosters WHERE match_id = $1 AND player_id = $2',
+      [req.params.id, playerId]
+    );
+    if (existingRows.length && existingRows[0].team_id !== teamId) {
+      return res.status(409).json({ error: "That player is already on the other team's roster for this match" });
+    }
+
+    await pool.query(
+      `INSERT INTO match_rosters (match_id, team_id, player_id, source, added_by)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (match_id, player_id) DO UPDATE SET source = EXCLUDED.source, added_by = EXCLUDED.added_by`,
+      [req.params.id, teamId, playerId, source, req.user.sub]
+    );
+
+    const updated = await fetchMatchWithRosters(pool, req.params.id);
+    res.json(updated);
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function removeRosterEntry(req, res, next) {
+  // teamId can't be inferred from an existing match_rosters row alone —
+  // there might not be one yet (nobody's touched this match's roster, so
+  // it's still showing the team_players fallback) — the caller already
+  // knows which team's column they're unchecking from, so it comes in as
+  // a query param, same as addRosterEntry takes it in the body.
+  const teamId = Number(req.query.teamId);
+  if (!teamId) {
+    return res.status(400).json({ error: 'teamId is required' });
+  }
+
+  try {
+    const { rows: matchRows } = await pool.query('SELECT * FROM matches WHERE id = $1', [req.params.id]);
+    const match = matchRows[0];
+    if (!match) return res.status(404).json({ error: 'Match not found' });
+    if (teamId !== match.home_team_id && teamId !== match.away_team_id) {
+      return res.status(400).json({ error: 'teamId must be one of the two match teams' });
+    }
+
+    const perm = await canEditMatchRoster(pool, req.user, teamId);
+    if (!perm.allowed) return res.status(403).json({ error: 'Forbidden' });
+
+    await materializeRosterIfEmpty(pool, req.params.id, teamId);
+
+    const { rows: existingRows } = await pool.query(
+      'SELECT source FROM match_rosters WHERE match_id = $1 AND team_id = $2 AND player_id = $3',
+      [req.params.id, teamId, req.params.playerId]
+    );
+    const existing = existingRows[0];
+    if (!existing) return res.status(404).json({ error: 'Roster entry not found' });
+    if (perm.captainOnly && existing.source !== 'regular') {
+      return res.status(403).json({ error: 'Only admins can remove subs or borrowed players' });
+    }
+
+    await pool.query('DELETE FROM match_rosters WHERE match_id = $1 AND player_id = $2', [
+      req.params.id,
+      req.params.playerId,
+    ]);
+
+    const updated = await fetchMatchWithRosters(pool, req.params.id);
+    res.json(updated);
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { list, getOne, recordResults, fetchEffectiveRoster, addRosterEntry, removeRosterEntry };

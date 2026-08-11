@@ -1,3 +1,4 @@
+const bcrypt = require('bcryptjs');
 const pool = require('../db/pool');
 
 function toApiShape(row) {
@@ -186,10 +187,13 @@ async function setAvailability(req, res, next) {
     }
 
     // An admin override also resolves the player's own pending ask, if
-    // they have an account to have received one.
+    // they have an account to have received one. Actionable notifications
+    // only ever resolve by deletion, never by marking read — same as
+    // match_needs_score — so they stay unread (and visible on the
+    // homepage) for as long as they're actually pending.
     await pool.query(
-      `UPDATE notifications n SET is_read = true
-       FROM players p
+      `DELETE FROM notifications n
+       USING players p
        WHERE p.id = $1 AND n.user_id = p.user_id
          AND n.type = 'season_availability_request' AND n.related_season_id = $2`,
       [req.params.playerId, req.params.id]
@@ -221,8 +225,10 @@ async function setMyAvailability(req, res, next) {
       return res.status(404).json({ error: "You are not part of this season's availability list" });
     }
 
+    // Resolve by deletion, not by marking read — see the comment in
+    // setAvailability above.
     await pool.query(
-      `UPDATE notifications SET is_read = true
+      `DELETE FROM notifications
        WHERE user_id = $1 AND type = 'season_availability_request' AND related_season_id = $2`,
       [req.user.sub, req.params.id]
     );
@@ -233,4 +239,32 @@ async function setMyAvailability(req, res, next) {
   }
 }
 
-module.exports = { list, getOne, create, getAvailability, setAvailability, setMyAvailability };
+// Deletes cascade through teams/matches/match_goals/team_players/
+// season_availability/notifications (all declared ON DELETE CASCADE on
+// seasons(id)) — a single DELETE is all that's needed.
+async function remove(req, res, next) {
+  const { currentPassword } = req.body;
+  if (!currentPassword) {
+    return res.status(400).json({ error: 'currentPassword is required' });
+  }
+  try {
+    const { rows: userRows } = await pool.query('SELECT * FROM users WHERE id = $1', [req.user.sub]);
+    const user = userRows[0];
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const valid = await bcrypt.compare(currentPassword, user.password_hash);
+    if (!valid) {
+      return res.status(401).json({ error: 'Current password is incorrect' });
+    }
+
+    const { rowCount } = await pool.query('DELETE FROM seasons WHERE id = $1', [req.params.id]);
+    if (!rowCount) return res.status(404).json({ error: 'Season not found' });
+    res.status(204).end();
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { list, getOne, create, getAvailability, setAvailability, setMyAvailability, remove };

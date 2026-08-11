@@ -10,7 +10,7 @@ import { useLeagues } from '../hooks/useLeagues';
 
 function SeasonsPage() {
   const navigate = useNavigate();
-  const { seasons, loading, createSeason, refetch } = useSeasons();
+  const { seasons, loading, createSeason, deleteSeason, refetch } = useSeasons();
   const { leagues } = useLeagues();
 
   return (
@@ -25,7 +25,7 @@ function SeasonsPage() {
         <Routes>
           <Route
             index
-            element={<SeasonsListView seasons={seasons} loading={loading} />}
+            element={<SeasonsListView seasons={seasons} loading={loading} deleteSeason={deleteSeason} />}
           />
           <Route
             path="create"

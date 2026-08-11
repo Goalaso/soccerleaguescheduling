@@ -13,7 +13,7 @@ function skillBarClass(skill) {
   return 'skill-bar-low';
 }
 
-function TeamCard({ team }) {
+function TeamCard({ team, editing, otherTeams, onMove, onRemove }) {
   return (
     <div className="team-card-v2" style={{ '--team-color': team.color }}>
       <div className="team-card-header">
@@ -47,15 +47,35 @@ function TeamCard({ team }) {
             <span className={`badge ${POSITION_CLASS[p.position]}`}>
               {p.position}
             </span>
-            <span className="skill-cell">
-              <span className="skill-number">{p.skill}</span>
-              <span className="skill-bar-track">
-                <span
-                  className={`skill-bar-fill ${skillBarClass(p.skill)}`}
-                  style={{ width: `${p.skill * 10}%` }}
-                />
+            {editing ? (
+              <div className="team-player-edit-actions">
+                <select
+                  className="select-input"
+                  value=""
+                  onChange={(e) => e.target.value && onMove(p.id, Number(e.target.value))}
+                >
+                  <option value="">Move to...</option>
+                  {otherTeams.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                    </option>
+                  ))}
+                </select>
+                <button type="button" className="link-btn link-btn-danger" onClick={() => onRemove(p.id)}>
+                  ✕
+                </button>
+              </div>
+            ) : (
+              <span className="skill-cell">
+                <span className="skill-number">{p.skill}</span>
+                <span className="skill-bar-track">
+                  <span
+                    className={`skill-bar-fill ${skillBarClass(p.skill)}`}
+                    style={{ width: `${p.skill * 10}%` }}
+                  />
+                </span>
               </span>
-            </span>
+            )}
           </div>
         ))}
       </div>

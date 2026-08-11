@@ -249,6 +249,27 @@
   gap: 1.5rem;
 }
 
+.roster-manager-panel {
+  margin-bottom: 1.5rem;
+}
+
+.roster-manager-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+  margin-top: 1rem;
+}
+
+.roster-manager-add-row {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.roster-manager-add-row .select-input {
+  flex: 1;
+}
+
 .record-roster-header {
   display: flex;
   align-items: center;
@@ -275,7 +296,37 @@
 }
 
 .record-player-row-readonly {
-  grid-template-columns: 1.5rem 1fr 2.5rem auto;
+  grid-template-columns: 1.2rem 1fr 2.5rem 3.5rem auto;
+}
+
+.record-player-row-unconfirmed {
+  opacity: 0.5;
+}
+
+.attendance-checkbox {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.gameday-attendance-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--success-solid);
+  justify-self: center;
+}
+
+.gameday-attendance-dot-out {
+  background: var(--text-faint);
+}
+
+.roster-source-badge {
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: var(--warning-text);
+  letter-spacing: 0.03em;
 }
 
 .gameday-goals {

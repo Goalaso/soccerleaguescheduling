@@ -88,7 +88,10 @@ export function generateTeams(allPlayers, options) {
   return teams.map((team) => summarizeTeam(team));
 }
 
-function summarizeTeam(team) {
+// Exported so pre-publish roster edits (moving/adding/removing a player in
+// SeasonTeamGenerator's local state) can recompute avgSkill/counts after
+// each change, the same way this runs once at initial generation.
+export function summarizeTeam(team) {
   const totalSkill = team.players.reduce((sum, p) => sum + p.skill, 0);
   const avgSkill = team.players.length ? totalSkill / team.players.length : 0;
 

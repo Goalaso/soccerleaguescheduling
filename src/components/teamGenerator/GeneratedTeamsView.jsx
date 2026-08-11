@@ -1,7 +1,20 @@
-import React from 'react';
+import React, { useState } from 'react';
 import TeamCard from './TeamCard';
 
-function GeneratedTeamsView({ teams, playerCount, isPublished, publishError, onRegenerate, onPublish }) {
+function GeneratedTeamsView({
+  teams,
+  playerCount,
+  isPublished,
+  publishError,
+  unassignedPlayers,
+  onRegenerate,
+  onPublish,
+  onMovePlayer,
+  onRemovePlayer,
+  onAddPlayer,
+}) {
+  const [editing, setEditing] = useState(false);
+
   return (
     <div className="panel generated-panel">
       <div className="generated-header">
@@ -16,9 +29,11 @@ function GeneratedTeamsView({ teams, playerCount, isPublished, publishError, onR
           <button className="outline-btn" onClick={onRegenerate}>
             Regenerate
           </button>
-          <button className="outline-btn" title="Editing coming soon" disabled>
-            Edit Teams
-          </button>
+          {!isPublished && (
+            <button className="outline-btn" onClick={() => setEditing((e) => !e)}>
+              {editing ? 'Done Editing' : 'Edit Teams'}
+            </button>
+          )}
           {!isPublished && (
             <button className="pill-btn pill-btn-blue" onClick={onPublish}>
               Save &amp; Publish
@@ -31,9 +46,45 @@ function GeneratedTeamsView({ teams, playerCount, isPublished, publishError, onR
 
       <div className="team-grid">
         {teams.map((team) => (
-          <TeamCard key={team.id} team={team} />
+          <TeamCard
+            key={team.id}
+            team={team}
+            editing={editing}
+            otherTeams={teams.filter((t) => t.id !== team.id)}
+            onMove={(playerId, toTeamId) => onMovePlayer(playerId, team.id, toTeamId)}
+            onRemove={(playerId) => onRemovePlayer(playerId, team.id)}
+          />
         ))}
       </div>
+
+      {editing && (
+        <div className="panel unassigned-players-panel">
+          <h3 className="panel-title">Unassigned Players</h3>
+          {unassignedPlayers.length === 0 ? (
+            <p className="empty-state-subtitle">Every eligible player is on a team.</p>
+          ) : (
+            <div className="unassigned-players-list">
+              {unassignedPlayers.map((p) => (
+                <div className="unassigned-player-chip" key={p.id}>
+                  <span>{p.name}</span>
+                  <select
+                    className="select-input"
+                    value=""
+                    onChange={(e) => e.target.value && onAddPlayer(p.id, Number(e.target.value))}
+                  >
+                    <option value="">Add to...</option>
+                    {teams.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

@@ -41,6 +41,10 @@
   align-items: start;
 }
 
+.team-roster-editor-panel {
+  margin-top: 1.5rem;
+}
+
 .league-breadcrumb-actions {
   display: flex;
   gap: 0.75rem;

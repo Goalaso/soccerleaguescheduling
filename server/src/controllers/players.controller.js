@@ -1,3 +1,4 @@
+const bcrypt = require('bcryptjs');
 const pool = require('../db/pool');
 const { validatePlayerProfile, normalizeLeagueIds } = require('../utils/validation');
 
@@ -189,8 +190,26 @@ async function update(req, res, next) {
   }
 }
 
+// Requires the acting admin's own password, same re-auth shape as
+// auth.controller.js's updateMe — this is an admin action, so it's the
+// admin's password being checked, not the player being deleted.
 async function remove(req, res, next) {
+  const { currentPassword } = req.body;
+  if (!currentPassword) {
+    return res.status(400).json({ error: 'currentPassword is required' });
+  }
   try {
+    const { rows: userRows } = await pool.query('SELECT * FROM users WHERE id = $1', [req.user.sub]);
+    const user = userRows[0];
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const valid = await bcrypt.compare(currentPassword, user.password_hash);
+    if (!valid) {
+      return res.status(401).json({ error: 'Current password is incorrect' });
+    }
+
     const { rowCount } = await pool.query('DELETE FROM players WHERE id = $1', [req.params.id]);
     if (!rowCount) return res.status(404).json({ error: 'Player not found' });
     res.status(204).end();

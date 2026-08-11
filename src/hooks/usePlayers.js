@@ -19,13 +19,13 @@ export function usePlayers() {
     onSuccess: invalidate,
   });
   const deleteMutation = useMutation({
-    mutationFn: (id) => apiDelete(`/players/${id}`),
+    mutationFn: ({ id, currentPassword }) => apiDelete(`/players/${id}`, { currentPassword }),
     onSuccess: invalidate,
   });
 
   const createPlayer = (payload) => createMutation.mutateAsync(payload);
   const updatePlayer = (id, payload) => updateMutation.mutateAsync({ id, payload });
-  const deletePlayer = (id) => deleteMutation.mutateAsync(id);
+  const deletePlayer = (id, currentPassword) => deleteMutation.mutateAsync({ id, currentPassword });
 
   return { players: data || [], loading: isLoading, error, refetch, createPlayer, updatePlayer, deletePlayer };
 }

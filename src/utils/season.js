@@ -11,6 +11,7 @@ export function buildSeasonFromMatches(matches, teams) {
   );
 
   const playerGoals = {};
+  const teamPlayerGoals = {};
   const scorersFlat = [];
 
   const mapped = matches.map((m) => {
@@ -41,6 +42,13 @@ export function buildSeasonFromMatches(matches, teams) {
 
       (m.scorers || []).forEach((s) => {
         playerGoals[s.playerId] = (playerGoals[s.playerId] || 0) + s.goals;
+        // Team-scoped total — goals scored *while playing for that team in
+        // that match*, per s.teamId. A player borrowed by another team for
+        // one match still only counts toward that team here, unlike the
+        // flat playerGoals total above (which is intentionally
+        // team-agnostic, for the league-wide top scorers list).
+        (teamPlayerGoals[s.teamId] ||= {});
+        teamPlayerGoals[s.teamId][s.playerId] = (teamPlayerGoals[s.teamId][s.playerId] || 0) + s.goals;
         scorersFlat.push(s);
       });
     }
@@ -95,6 +103,7 @@ export function buildSeasonFromMatches(matches, teams) {
     standings,
     topScorers,
     playerGoals,
+    teamPlayerGoals,
     nextMatch,
   };
 }

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useMatch } from '../../hooks/useMatch';
+import { useSeasonAvailability } from '../../hooks/useSeasonAvailability';
 import { formatMatchDate, isMatchOverdue } from '../../utils/season';
 
 const POSITION_ABBR = {
@@ -57,10 +58,130 @@ function RosterColumn({ team, goalsByPlayer, onChange }) {
   );
 }
 
-function RecordResultsView({ matches, onResultsSaved }) {
+// Admin-only match-day roster editor: confirm/unconfirm each team's regular
+// roster (same toggle a captain does), plus add a sub (available this
+// season, not on any team) or borrow a player from the other team playing
+// this match. Works before the match (assigning subs) or after a score's
+// already recorded (in-game swap bookkeeping/correction) — it's just
+// "edit this match's roster," usable any time this screen is open.
+function RosterManager({ match, teams, seasonId, addToRoster, removeFromRoster }) {
+  const [expanded, setExpanded] = useState(false);
+  const [picks, setPicks] = useState({});
+  const [busy, setBusy] = useState(false);
+  const { players: availability } = useSeasonAvailability(seasonId);
+
+  if (!teams) return null;
+
+  const fullRosterFor = (teamId) => teams.find((t) => t.id === teamId)?.players || [];
+  const rosteredIds = new Set(teams.flatMap((t) => t.players.map((p) => p.id)));
+  const subPool = availability.filter((p) => p.isAvailable && !rosteredIds.has(p.playerId));
+
+  const handleToggleRegular = async (teamId, playerId, confirmed) => {
+    setBusy(true);
+    try {
+      if (confirmed) await removeFromRoster(playerId, teamId);
+      else await addToRoster(playerId, teamId, 'regular');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleRemove = async (teamId, playerId) => {
+    setBusy(true);
+    try {
+      await removeFromRoster(playerId, teamId);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleAdd = async (team) => {
+    const pick = picks[team.id];
+    if (!pick) return;
+    const [source, playerIdStr] = pick.split(':');
+    setBusy(true);
+    try {
+      await addToRoster(Number(playerIdStr), team.id, source);
+      setPicks((prev) => ({ ...prev, [team.id]: '' }));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const renderTeam = (team, otherTeamId) => {
+    const fullRoster = fullRosterFor(team.id);
+    const confirmedIds = new Set(team.players.map((p) => p.id));
+    const guests = team.players.filter((p) => p.source !== 'regular');
+    const borrowable = fullRosterFor(otherTeamId).filter((p) => !confirmedIds.has(p.id));
+    const candidates = [
+      ...subPool.map((p) => ({ id: p.playerId, name: p.name, source: 'sub' })),
+      ...borrowable.map((p) => ({ id: p.id, name: p.name, source: 'borrowed' })),
+    ];
+
+    return (
+      <div>
+        <span className="option-label">{team.name}</span>
+        {fullRoster.map((p) => (
+          <label className="checkbox-row" key={p.id}>
+            <input
+              type="checkbox"
+              checked={confirmedIds.has(p.id)}
+              disabled={busy}
+              onChange={() => handleToggleRegular(team.id, p.id, confirmedIds.has(p.id))}
+            />
+            <span>{p.name}</span>
+          </label>
+        ))}
+        {guests.map((p) => (
+          <div className="checkbox-row" key={p.id}>
+            <span>
+              {p.name} <span className="roster-source-badge">{p.source.toUpperCase()}</span>
+            </span>
+            <button type="button" className="link-btn link-btn-danger" onClick={() => handleRemove(team.id, p.id)}>
+              Remove
+            </button>
+          </div>
+        ))}
+        <div className="roster-manager-add-row">
+          <select
+            className="select-input"
+            value={picks[team.id] || ''}
+            onChange={(e) => setPicks((prev) => ({ ...prev, [team.id]: e.target.value }))}
+          >
+            <option value="">Add sub or borrowed player...</option>
+            {candidates.map((c) => (
+              <option key={`${c.source}-${c.id}`} value={`${c.source}:${c.id}`}>
+                {c.name} ({c.source})
+              </option>
+            ))}
+          </select>
+          <button type="button" className="outline-btn" disabled={busy || !picks[team.id]} onClick={() => handleAdd(team)}>
+            Add
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="panel roster-manager-panel">
+      <button type="button" className="link-btn" onClick={() => setExpanded((e) => !e)}>
+        {expanded ? '▾' : '▸'} Manage Roster
+      </button>
+      {expanded && (
+        <div className="roster-manager-grid">
+          {renderTeam(match.home, match.away.id)}
+          {renderTeam(match.away, match.home.id)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RecordResultsView({ matches, teams, seasonId, onResultsSaved }) {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { match, loading, submitResults } = useMatch(id);
+  const { match, loading, submitResults, addToRoster, removeFromRoster } = useMatch(id);
 
   const [homeGoalsByPlayer, setHomeGoalsByPlayer] = useState({});
   const [awayGoalsByPlayer, setAwayGoalsByPlayer] = useState({});
@@ -238,6 +359,14 @@ function RecordResultsView({ matches, onResultsSaved }) {
         </div>
         <span className="record-score-team record-score-team-right">{match.away.name}</span>
       </div>
+
+      <RosterManager
+        match={match}
+        teams={teams}
+        seasonId={seasonId}
+        addToRoster={addToRoster}
+        removeFromRoster={removeFromRoster}
+      />
 
       <div className="record-roster-grid">
         <RosterColumn

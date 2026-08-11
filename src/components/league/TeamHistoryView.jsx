@@ -2,7 +2,17 @@ import React from 'react';
 import TeamSummaryCard from './TeamSummaryCard';
 import MatchHistoryList from './MatchHistoryList';
 
-function TeamHistoryView({ team, standing, rank, recentForm, topScorer, matches, onBack, onGoToProfile }) {
+function TeamHistoryView({
+  team,
+  standing,
+  rank,
+  recentForm,
+  topScorer,
+  matches,
+  onBack,
+  onGoToProfile,
+  onGoToPlayerStats,
+}) {
   return (
     <div className="league-section">
       <div className="notify-breadcrumb">
@@ -14,7 +24,7 @@ function TeamHistoryView({ team, standing, rank, recentForm, topScorer, matches,
           Monday Night League · Winter 2026
         </span>
         <div className="league-breadcrumb-actions">
-          <button className="outline-btn" title="Coming soon" disabled>
+          <button className="outline-btn" onClick={onGoToPlayerStats}>
             Player Stats
           </button>
           <button className="pill-btn pill-btn-blue" onClick={onGoToProfile}>

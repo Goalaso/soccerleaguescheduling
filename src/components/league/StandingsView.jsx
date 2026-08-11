@@ -3,7 +3,7 @@ import StandingsTable from './StandingsTable';
 import TopScorersPanel from './TopScorersPanel';
 import NextMatchPanel from './NextMatchPanel';
 
-function StandingsView({ season, onSelectTeam, onGoToSchedule }) {
+function StandingsView({ season, onSelectTeam, onGoToSchedule, onGoToPlayerStats }) {
   return (
     <div className="league-section">
       <div className="generated-header">
@@ -19,7 +19,7 @@ function StandingsView({ season, onSelectTeam, onGoToSchedule }) {
           <button className="tab-btn" onClick={onGoToSchedule}>
             Schedule
           </button>
-          <button className="tab-btn" title="Coming soon" disabled>
+          <button className="tab-btn" onClick={onGoToPlayerStats}>
             Player Stats
           </button>
         </div>

@@ -153,5 +153,12 @@
 .player-manage-actions {
   display: flex;
   gap: 0.75rem;
+  flex-wrap: wrap;
   justify-content: flex-end;
+  /* Overrides the row-level overflow/nowrap escape hatch (shared.css) —
+     that's meant for text cells that should ellipsis; this cell holds real
+     buttons, which should wrap onto a second line under space pressure
+     instead of being clipped/made unclickable. */
+  overflow: visible;
+  white-space: normal;
 }

@@ -19,6 +19,7 @@
   .league-profile-grid,
   .schedule-layout,
   .record-roster-grid,
+  .roster-manager-grid,
   .player-form-grid,
   .player-form-row {
     grid-template-columns: 1fr;
@@ -226,15 +227,27 @@
     padding: 0.5rem 0.4rem;
   }
 
+  /* Down to 4 visible cells (Player, Position, Skill, Actions) — Leagues
+     is the least essential at a glance (comma-joined league names are the
+     single worst fit for a narrow column) and it's still visible via Edit. */
   .player-table-row.player-manage-row {
-    grid-template-columns: 1.2fr 0.9fr 0.5fr 1fr 0.8fr;
+    grid-template-columns: 1.3fr 1fr 0.5fr 0.9fr;
     font-size: 0.78rem;
   }
 
-  /* League */
+  .player-table-row.player-manage-row span:nth-child(4) {
+    display: none;
+  }
+
+  /* League: down to 4 visible cells (Player, Position, Skill, Goals) —
+     Age is the least essential at a glance here. */
   .player-table-row.roster-table-row {
-    grid-template-columns: 1.2fr 0.9fr 0.5fr 0.5fr 0.5fr;
+    grid-template-columns: 1.3fr 1fr 0.5fr 0.5fr;
     font-size: 0.78rem;
+  }
+
+  .player-table-row.roster-table-row span:nth-child(5) {
+    display: none;
   }
 
   /* Down to 6 visible cells (#, Team, W, D, L, PTS) — hide MP too now
@@ -296,7 +309,8 @@
   }
 
   .record-player-row-readonly {
-    grid-template-columns: 1.2rem 1fr 2.2rem 1.2rem;
+    grid-template-columns: 1.2rem 1fr 2.2rem 2.6rem 1.2rem;
+    font-size: 0.8rem;
   }
 
   .record-player-name {

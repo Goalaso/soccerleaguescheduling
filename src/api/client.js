@@ -33,6 +33,6 @@ export function apiPatch(path, body) {
   return apiFetch(path, { method: 'PATCH', body: JSON.stringify(body) });
 }
 
-export function apiDelete(path) {
-  return apiFetch(path, { method: 'DELETE' });
+export function apiDelete(path, body) {
+  return apiFetch(path, { method: 'DELETE', ...(body !== undefined ? { body: JSON.stringify(body) } : {}) });
 }

@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { apiGet, apiPost } from '../api/client';
+import { apiGet, apiPost, apiDelete } from '../api/client';
 
 // List of seasons, optionally scoped to one league — used by the season
 // dropdown and the SeasonsPage list. Different leagueId values (including
@@ -19,7 +19,15 @@ export function useSeasons(leagueId) {
     },
   });
 
-  const createSeason = (payload) => createMutation.mutateAsync(payload);
+  const deleteMutation = useMutation({
+    mutationFn: ({ id, currentPassword }) => apiDelete(`/seasons/${id}`, { currentPassword }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['seasons'] });
+    },
+  });
 
-  return { seasons: data || [], loading: isLoading, error, refetch, createSeason };
+  const createSeason = (payload) => createMutation.mutateAsync(payload);
+  const deleteSeason = (id, currentPassword) => deleteMutation.mutateAsync({ id, currentPassword });
+
+  return { seasons: data || [], loading: isLoading, error, refetch, createSeason, deleteSeason };
 }

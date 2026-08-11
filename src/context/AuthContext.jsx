@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { apiGet, apiPost, apiPatch } from '../api/client';
+import { apiGet, apiPost, apiPatch, apiDelete } from '../api/client';
 
 const AuthContext = createContext(null);
 
@@ -61,9 +61,17 @@ export function AuthProvider({ children }) {
     return data.user;
   };
 
+  // Cookie is already cleared server-side by the deleteMe endpoint — no
+  // separate logout call needed, just drop local state the same way logout does.
+  const deleteAccount = async (currentPassword) => {
+    await apiDelete('/auth/me', { currentPassword });
+    setUser(null);
+    queryClient.clear();
+  };
+
   return (
     <AuthContext.Provider
-      value={{ user, loading, login, register, logout, updateAccount, devLoginAsAdmin }}
+      value={{ user, loading, login, register, logout, updateAccount, deleteAccount, devLoginAsAdmin }}
     >
       {children}
     </AuthContext.Provider>

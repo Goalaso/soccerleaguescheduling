@@ -10,8 +10,25 @@ const COOKIE_OPTIONS = {
   maxAge: 2 * 60 * 60 * 1000,
 };
 
-function publicUser(user) {
-  return { id: user.id, email: user.email, name: user.name, role: user.role };
+// A team's captain isn't a separate role — it's a per-team designation
+// (teams.captain_player_id) on top of role='player', so it's resolved
+// fresh here rather than baked into the JWT at login time.
+async function getCaptainOfTeamIds(userId) {
+  const { rows } = await pool.query(
+    `SELECT t.id FROM teams t JOIN players p ON p.id = t.captain_player_id WHERE p.user_id = $1`,
+    [userId]
+  );
+  return rows.map((r) => r.id);
+}
+
+async function publicUser(user) {
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    role: user.role,
+    captainOfTeamIds: await getCaptainOfTeamIds(user.id),
+  };
 }
 
 async function register(req, res, next) {
@@ -94,7 +111,7 @@ async function register(req, res, next) {
 
     const token = signToken(user);
     res.cookie('token', token, COOKIE_OPTIONS);
-    res.status(201).json({ user: publicUser(user) });
+    res.status(201).json({ user: await publicUser(user) });
   } catch (err) {
     await client.query('ROLLBACK');
     next(err);
@@ -123,7 +140,7 @@ async function login(req, res, next) {
 
     const token = signToken(user);
     res.cookie('token', token, COOKIE_OPTIONS);
-    res.json({ user: publicUser(user) });
+    res.json({ user: await publicUser(user) });
   } catch (err) {
     next(err);
   }
@@ -144,7 +161,7 @@ async function devLoginAsAdmin(req, res, next) {
 
     const token = signToken(user);
     res.cookie('token', token, COOKIE_OPTIONS);
-    res.json({ user: publicUser(user) });
+    res.json({ user: await publicUser(user) });
   } catch (err) {
     next(err);
   }
@@ -161,7 +178,7 @@ async function me(req, res, next) {
     if (!rows[0]) {
       return res.status(401).json({ error: 'Not authenticated' });
     }
-    res.json({ user: publicUser(rows[0]) });
+    res.json({ user: await publicUser(rows[0]) });
   } catch (err) {
     next(err);
   }
@@ -216,10 +233,44 @@ async function updateMe(req, res, next) {
 
     const token = signToken(updatedUser);
     res.cookie('token', token, COOKIE_OPTIONS);
-    res.json({ user: publicUser(updatedUser) });
+    res.json({ user: await publicUser(updatedUser) });
   } catch (err) {
     next(err);
   }
 }
 
-module.exports = { register, login, logout, me, updateMe, devLoginAsAdmin };
+// Self-service account deletion, players only — an admin deleting their own
+// account would leave devLoginAsAdmin (which grabs "the first admin row")
+// with nothing to find and no recovery path short of reseeding the DB.
+// players.user_id/created_by, matches.recorded_by, season_availability.marked_by,
+// and seasons.created_by are all ON DELETE SET NULL, so this only removes
+// login access — the player's roster entry, stats, and match history stay.
+async function deleteMe(req, res, next) {
+  const { currentPassword } = req.body;
+  if (!currentPassword) {
+    return res.status(400).json({ error: 'currentPassword is required' });
+  }
+  if (req.user.role !== 'player') {
+    return res.status(403).json({ error: 'Admin accounts cannot be self-deleted' });
+  }
+  try {
+    const { rows } = await pool.query('SELECT * FROM users WHERE id = $1', [req.user.sub]);
+    const user = rows[0];
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const valid = await bcrypt.compare(currentPassword, user.password_hash);
+    if (!valid) {
+      return res.status(401).json({ error: 'Current password is incorrect' });
+    }
+
+    await pool.query('DELETE FROM users WHERE id = $1', [req.user.sub]);
+    res.clearCookie('token', { httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production' });
+    res.status(204).end();
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { register, login, logout, me, updateMe, deleteMe, devLoginAsAdmin };

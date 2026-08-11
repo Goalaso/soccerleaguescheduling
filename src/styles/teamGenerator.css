@@ -137,6 +137,37 @@
   font-size: 0.85rem;
 }
 
+.team-player-edit-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.team-player-edit-actions .select-input {
+  padding: 0.3rem 0.5rem;
+  font-size: 0.75rem;
+}
+
+.unassigned-players-panel {
+  margin-top: 1.5rem;
+}
+
+.unassigned-players-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.unassigned-player-chip {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--bg-panel-alt);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  padding: 0.4rem 0.6rem;
+}
+
 .team-balance-row {
   display: flex;
   align-items: center;

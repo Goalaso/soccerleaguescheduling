@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PageBanner from './PageBanner';
 import PlayerFormFields from './managePlayers/PlayerFormFields';
+import ConfirmPasswordModal from './ConfirmPasswordModal';
 import { useAuth } from '../context/AuthContext';
 import { useMyProfile } from '../hooks/useMyProfile';
 import { useLeagues } from '../hooks/useLeagues';
@@ -19,7 +20,8 @@ const EMPTY_VALUES = {
 };
 
 function AccountSettingsPanel() {
-  const { user, updateAccount } = useAuth();
+  const navigate = useNavigate();
+  const { user, updateAccount, deleteAccount } = useAuth();
   const [email, setEmail] = useState(user?.email || '');
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -27,6 +29,12 @@ function AccountSettingsPanel() {
   const [error, setError] = useState(null);
   const [saved, setSaved] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+
+  const handleDeleteAccount = async (password) => {
+    await deleteAccount(password);
+    navigate('/login', { replace: true });
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -125,6 +133,29 @@ function AccountSettingsPanel() {
           {submitting ? 'Saving...' : 'Update Account'}
         </button>
       </form>
+
+      {user?.role === 'player' && (
+        <div className="danger-zone">
+          <span className="option-label">Danger Zone</span>
+          <button
+            type="button"
+            className="outline-btn danger-outline-btn full-width"
+            onClick={() => setConfirmingDelete(true)}
+          >
+            Delete My Account
+          </button>
+        </div>
+      )}
+
+      {confirmingDelete && (
+        <ConfirmPasswordModal
+          title="Delete My Account"
+          description="This permanently deletes your account and login access. Your player profile, team roster spot, and match history stay intact — you'd need a new account to log back in and manage them. This cannot be undone."
+          confirmLabel="Delete My Account"
+          onConfirm={handleDeleteAccount}
+          onClose={() => setConfirmingDelete(false)}
+        />
+      )}
     </div>
   );
 }
