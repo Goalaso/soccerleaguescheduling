@@ -18,12 +18,17 @@ function SchedulePage() {
   const { selectedSeasonId, loading: seasonLoading } = useSelectedSeason();
   const { teams, loading: teamsLoading } = usePublishedTeams(selectedSeasonId);
   const { matches, loading: matchesLoading, refetch } = useMatches(selectedSeasonId);
-  const { profile } = useMyProfile();
+  const { profile, loading: profileLoading } = useMyProfile();
   const isAdmin = user?.role === 'admin';
 
   const myTeam = teams?.find((t) => t.players.some((p) => p.id === profile?.id));
 
-  const loading = seasonLoading || teamsLoading || matchesLoading;
+  // profileLoading has to be part of this gate — myTeam depends on profile,
+  // and if profile resolves slower than the other three (real network
+  // latency in production, rarely noticeable on localhost), the calendar
+  // can render before it's ready and filter out every match for a
+  // non-admin viewer, even though their data is actually fine.
+  const loading = seasonLoading || teamsLoading || matchesLoading || profileLoading;
 
   return (
     <>

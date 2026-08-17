@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { formatMatchDate, isMatchOverdue, parseMatchDate } from '../../utils/season';
 
 const DAY_LABELS = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
@@ -33,6 +33,25 @@ function CalendarView({ matches, showAll, filterTeamId, onSelectMatch }) {
     const d = first ? parseMatchDate(first.matchDate) : new Date();
     return new Date(d.getFullYear(), d.getMonth(), 1);
   });
+
+  // The useState initializer above only ever runs once, at mount — if this
+  // component mounts before its filtered match set is actually populated
+  // (e.g. a slower-to-resolve profile fetch upstream), it locks in "today's
+  // month" and never recovers even once the real data arrives a moment
+  // later. Catch that specific empty -> populated transition and jump to
+  // the right month then, without fighting a user who's already navigated
+  // manually during normal use (this only fires on that one transition).
+  const hadMatches = useRef(sorted.length > 0);
+  useEffect(() => {
+    const hasMatches = sorted.length > 0;
+    if (!hadMatches.current && hasMatches) {
+      const first = needsScore[0] || upcoming[0] || sorted[0];
+      const d = parseMatchDate(first.matchDate);
+      setMonthStart(new Date(d.getFullYear(), d.getMonth(), 1));
+    }
+    hadMatches.current = hasMatches;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sorted]);
 
   const matchesByDay = useMemo(() => {
     const map = {};
