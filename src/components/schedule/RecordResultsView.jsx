@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useMatch } from '../../hooks/useMatch';
 import { useSeasonAvailability } from '../../hooks/useSeasonAvailability';
-import { formatMatchDate, isMatchOverdue } from '../../utils/season';
+import { formatMatchDate, isMatchOverdue, parseMatchDate } from '../../utils/season';
 
 const POSITION_ABBR = {
   Goalkeeper: 'GK',
@@ -178,6 +178,47 @@ function RosterManager({ match, teams, seasonId, addToRoster, removeFromRoster }
   );
 }
 
+// Read-only display of what each team's captain reported, if anything —
+// never writes anything itself. "Use Reported Scores" just prefills the
+// admin's own goalsByPlayer state below; the admin still reviews and hits
+// the normal Submit Results button to actually finalize.
+function CaptainReportedScores({ match, onUse }) {
+  const submissions = match.scoreSubmissions || [];
+  if (!submissions.length) return null;
+
+  const teamFor = (teamId) => (teamId === match.home.id ? match.home : match.away);
+  const playerName = (teamId, playerId) =>
+    teamFor(teamId).players.find((p) => p.id === playerId)?.name || 'Unknown player';
+
+  const agree =
+    submissions.length === 2 &&
+    submissions[0].homeGoals === submissions[1].homeGoals &&
+    submissions[0].awayGoals === submissions[1].awayGoals;
+
+  return (
+    <div className="panel captain-reports-panel">
+      <div className="players-panel-header">
+        <h3 className="panel-title">Captain-Reported Scores</h3>
+        {submissions.length === 2 && (
+          <span className={`badge badge-count ${agree ? 'status-published' : ''}`}>
+            {agree ? 'Scores Agree' : 'Scores Conflict'}
+          </span>
+        )}
+      </div>
+      {submissions.map((s) => (
+        <p className="captain-report-row" key={s.teamId}>
+          <span className="option-label">{teamFor(s.teamId).name}</span> reported {s.homeGoals}-{s.awayGoals}
+          {s.scorers.length > 0 &&
+            ` — ${s.scorers.map((sc) => `${playerName(s.teamId, sc.playerId)} (${sc.goals})`).join(', ')}`}
+        </p>
+      ))}
+      <button type="button" className="outline-btn" onClick={onUse}>
+        Use Reported Scores
+      </button>
+    </div>
+  );
+}
+
 function RecordResultsView({ matches, teams, seasonId, onResultsSaved }) {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -208,6 +249,19 @@ function RecordResultsView({ matches, teams, seasonId, onResultsSaved }) {
   const homeTotal = Object.values(homeGoalsByPlayer).reduce((s, v) => s + v, 0);
   const awayTotal = Object.values(awayGoalsByPlayer).reduce((s, v) => s + v, 0);
   const canSubmit = homeTotal > 0 || awayTotal > 0 || match.status === 'played';
+
+  const handleUseReportedScores = () => {
+    const submissions = match.scoreSubmissions || [];
+    const homeSubmission = submissions.find((s) => s.teamId === match.home.id);
+    const awaySubmission = submissions.find((s) => s.teamId === match.away.id);
+
+    if (homeSubmission) {
+      setHomeGoalsByPlayer(homeSubmission.scorers.reduce((acc, s) => ({ ...acc, [s.playerId]: s.goals }), {}));
+    }
+    if (awaySubmission) {
+      setAwayGoalsByPlayer(awaySubmission.scorers.reduce((acc, s) => ({ ...acc, [s.playerId]: s.goals }), {}));
+    }
+  };
 
   const handleSubmit = async () => {
     setError(null);
@@ -253,7 +307,7 @@ function RecordResultsView({ matches, teams, seasonId, onResultsSaved }) {
           <div className="record-success-message">
             <h3 className="modal-title">Results Saved!</h3>
             <p className="generated-subtitle">
-              {fullDate(new Date(match.matchDate))} · {shortName(match.home.name)} vs{' '}
+              {fullDate(parseMatchDate(match.matchDate))} · {shortName(match.home.name)} vs{' '}
               {shortName(match.away.name)}
             </p>
 
@@ -265,7 +319,7 @@ function RecordResultsView({ matches, teams, seasonId, onResultsSaved }) {
                 </p>
                 {otherPending.slice(0, 3).map((m) => (
                   <p key={m.id} className="record-warning-item">
-                    Mon · {formatMatchDate(new Date(m.matchDate))} — {shortName(m.home.name)} vs{' '}
+                    Mon · {formatMatchDate(parseMatchDate(m.matchDate))} — {shortName(m.home.name)} vs{' '}
                     {shortName(m.away.name)}
                     <br />
                     <span className="generated-subtitle">Score has not been recorded yet.</span>
@@ -338,7 +392,7 @@ function RecordResultsView({ matches, teams, seasonId, onResultsSaved }) {
           &lt; Calendar
         </button>
         <span className="notify-breadcrumb-title">Record Game Results</span>
-        <span className="generated-subtitle">Mon · {fullDate(new Date(match.matchDate))}</span>
+        <span className="generated-subtitle">Mon · {fullDate(parseMatchDate(match.matchDate))}</span>
         <button
           className="pill-btn pill-btn-blue notify-send-btn"
           onClick={handleSubmit}
@@ -349,6 +403,8 @@ function RecordResultsView({ matches, teams, seasonId, onResultsSaved }) {
       </div>
 
       {error && <p className="options-warning">{error}</p>}
+
+      <CaptainReportedScores match={match} onUse={handleUseReportedScores} />
 
       <div className="panel record-score-header">
         <span className="record-score-team">{match.home.name}</span>

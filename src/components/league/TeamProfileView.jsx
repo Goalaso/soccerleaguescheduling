@@ -125,7 +125,6 @@ function TeamProfileView({
   playerGoals,
   onBack,
   onGoToSchedule,
-  onGoToPlayerStats,
   isAdmin,
   allTeams,
   seasonId,
@@ -145,9 +144,6 @@ function TeamProfileView({
           Monday Night League · Winter 2026
         </span>
         <div className="league-breadcrumb-actions">
-          <button className="outline-btn" onClick={onGoToPlayerStats}>
-            Player Stats
-          </button>
           <button className="outline-btn" onClick={onGoToSchedule}>
             Schedule
           </button>

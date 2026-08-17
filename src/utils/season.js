@@ -4,6 +4,19 @@
 // (server/src/controllers/matches.controller.js), so this file only reduces
 // over that data. No randomness here.
 
+// matchDate from the API is a plain calendar date ('YYYY-MM-DD', no time or
+// timezone — see server/src/db/pool.js's DATE type-parser override).
+// `new Date(str)` on a date-only string parses it as UTC, so any getter
+// used downstream (.getDate(), .getDay(), toLocaleDateString(), ...) would
+// still shift by a day for anyone browsing from west of UTC. Pulling the
+// Y/M/D apart and using the local-time Date constructor sidesteps that
+// entirely — the result represents exactly the calendar date that was
+// stored, regardless of the browser's (or, previously, the server's) timezone.
+export function parseMatchDate(matchDate) {
+  const [year, month, day] = matchDate.slice(0, 10).split('-').map(Number);
+  return new Date(year, month - 1, day);
+}
+
 export function buildSeasonFromMatches(matches, teams) {
   const teamsById = Object.fromEntries(teams.map((t) => [t.id, t]));
   const standingsById = Object.fromEntries(
@@ -58,7 +71,7 @@ export function buildSeasonFromMatches(matches, teams) {
       week: m.week,
       homeId: m.home.id,
       awayId: m.away.id,
-      date: new Date(m.matchDate),
+      date: parseMatchDate(m.matchDate),
       home: m.home,
       away: m.away,
       played,
@@ -131,7 +144,7 @@ export function formatMatchDate(date) {
 // passed — a future scheduled match isn't overdue, just not played yet.
 export function isMatchOverdue(match) {
   if (match.status !== 'scheduled') return false;
-  const matchDate = new Date(match.matchDate);
+  const matchDate = parseMatchDate(match.matchDate);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   return matchDate <= today;

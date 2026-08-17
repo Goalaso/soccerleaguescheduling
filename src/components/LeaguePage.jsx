@@ -42,7 +42,7 @@ function useSelectedTeam(season) {
   return { id, standing, rank, matches, recentForm, topScorer };
 }
 
-function TeamHistoryRoute({ season }) {
+function TeamHistoryRoute({ season, gamesPlayedByPlayer }) {
   const navigate = useNavigate();
   const selected = useSelectedTeam(season);
   if (!selected) return <Navigate to="/league/standings" replace />;
@@ -55,9 +55,11 @@ function TeamHistoryRoute({ season }) {
       recentForm={selected.recentForm}
       topScorer={selected.topScorer}
       matches={selected.matches}
+      teamGoals={season.teamPlayerGoals[selected.id] || {}}
+      gamesPlayedByPlayer={gamesPlayedByPlayer}
       onBack={() => navigate('/league/standings')}
       onGoToProfile={() => navigate(`/league/team/${selected.id}/profile`)}
-      onGoToPlayerStats={() => navigate(`/league/team/players?team=${selected.id}`)}
+      onSelectMatch={(matchId) => navigate(`/schedule/match/${matchId}`)}
     />
   );
 }
@@ -78,7 +80,6 @@ function TeamProfileRoute({ season, seasonId, roster }) {
       playerGoals={season.teamPlayerGoals[selected.id] || {}}
       onBack={() => navigate(`/league/team/${selected.id}`)}
       onGoToSchedule={() => navigate('/schedule')}
-      onGoToPlayerStats={() => navigate(`/league/team/players?team=${selected.id}`)}
       isAdmin={user?.role === 'admin'}
       allTeams={season.standings.map((s) => s.team)}
       seasonId={seasonId}
@@ -166,7 +167,10 @@ function LeaguePage() {
               />
             }
           />
-          <Route path="team/:teamId" element={<TeamHistoryRoute season={season} />} />
+          <Route
+            path="team/:teamId"
+            element={<TeamHistoryRoute season={season} gamesPlayedByPlayer={gamesPlayedByPlayer} />}
+          />
           <Route
             path="team/:teamId/profile"
             element={

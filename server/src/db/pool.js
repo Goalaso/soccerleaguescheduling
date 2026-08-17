@@ -1,8 +1,19 @@
-const { Pool } = require('pg');
+const { Pool, types } = require('pg');
 
 if (!process.env.DATABASE_URL) {
   throw new Error('DATABASE_URL is not set. Copy server/.env.example to server/.env and fill it in.');
 }
+
+// pg's default DATE (OID 1082) parser builds a JS Date using the *server
+// process's own local timezone* — so the same stored value comes out
+// differently depending on where the code happens to run (a real bug we
+// hit: local dev and AWS Lambda disagree on which calendar day a match
+// falls on, since Lambda defaults to UTC and a dev machine usually
+// doesn't). match_date has no time-of-day meaning at all, so skip Date
+// parsing entirely and hand back the raw 'YYYY-MM-DD' string — the
+// frontend parses it explicitly in a timezone-safe way (see
+// parseMatchDate in src/utils/season.js).
+types.setTypeParser(1082, (val) => val);
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,

@@ -33,9 +33,26 @@ export function useMatch(matchId) {
     onSuccess: applyRosterUpdate,
   });
 
+  // Captain-reported proposal — never writes the official result itself,
+  // just lands in match.scoreSubmissions for the admin to review/prefill from.
+  const submitCaptainScoreMutation = useMutation({
+    mutationFn: (payload) => apiPost(`/matches/${matchId}/submit-score`, payload),
+    onSuccess: applyRosterUpdate,
+  });
+
   const submitResults = (payload) => submitMutation.mutateAsync(payload);
   const addToRoster = (playerId, teamId, source) => addRosterMutation.mutateAsync({ playerId, teamId, source });
   const removeFromRoster = (playerId, teamId) => removeRosterMutation.mutateAsync({ playerId, teamId });
+  const submitCaptainScore = (payload) => submitCaptainScoreMutation.mutateAsync(payload);
 
-  return { match: data ?? null, loading: isLoading, error, refetch, submitResults, addToRoster, removeFromRoster };
+  return {
+    match: data ?? null,
+    loading: isLoading,
+    error,
+    refetch,
+    submitResults,
+    addToRoster,
+    removeFromRoster,
+    submitCaptainScore,
+  };
 }

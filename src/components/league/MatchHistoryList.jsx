@@ -1,7 +1,7 @@
 import React from 'react';
 import { formatMatchDate, matchResultLetter } from '../../utils/season';
 
-function MatchHistoryList({ team, matches }) {
+function MatchHistoryList({ team, matches, onSelectMatch }) {
   return (
     <div className="panel match-history-panel">
       <div className="players-panel-header">
@@ -15,7 +15,11 @@ function MatchHistoryList({ team, matches }) {
         {matches.map((match) => {
           const letter = matchResultLetter(match, team.id);
           return (
-            <div className="match-history-row" key={`${match.week}`}>
+            <div
+              className="match-history-row match-history-row-clickable"
+              key={`${match.week}`}
+              onClick={() => onSelectMatch(match.id)}
+            >
               <span className="match-history-week">Week {match.week}</span>
               <span className="match-history-teams">
                 {match.home.name} <span className="match-history-vs">vs</span>{' '}

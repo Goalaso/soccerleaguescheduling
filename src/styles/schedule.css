@@ -243,6 +243,12 @@
   color: white;
 }
 
+.record-score-box-input {
+  width: 56px;
+  font-family: inherit;
+  font-size: inherit;
+}
+
 .record-roster-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -251,6 +257,21 @@
 
 .roster-manager-panel {
   margin-bottom: 1.5rem;
+}
+
+.captain-reports-panel {
+  margin-bottom: 1.5rem;
+}
+
+.captain-report-row {
+  font-size: 0.85rem;
+  color: var(--text-soft);
+  margin-bottom: 0.75rem;
+}
+
+.captain-report-row .option-label {
+  color: white;
+  margin-right: 0.3rem;
 }
 
 .roster-manager-grid {

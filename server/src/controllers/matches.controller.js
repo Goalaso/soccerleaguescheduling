@@ -225,9 +225,13 @@ async function fetchMatchWithRosters(db, matchId) {
   const match = await fetchMatchById(db, matchId);
   if (!match) return null;
 
-  const [homeRoster, awayRoster] = await Promise.all([
+  const [homeRoster, awayRoster, submissionRows] = await Promise.all([
     fetchEffectiveRoster(db, matchId, match.home.id),
     fetchEffectiveRoster(db, matchId, match.away.id),
+    db.query(
+      'SELECT team_id, home_goals, away_goals, scorers, submitted_at FROM match_score_submissions WHERE match_id = $1',
+      [matchId]
+    ),
   ]);
 
   return {
@@ -240,6 +244,13 @@ async function fetchMatchWithRosters(db, matchId) {
       ...match.away,
       players: awayRoster.map((row) => ({ ...playerToApiShape(row), source: row.source })),
     },
+    scoreSubmissions: submissionRows.rows.map((r) => ({
+      teamId: r.team_id,
+      homeGoals: r.home_goals,
+      awayGoals: r.away_goals,
+      scorers: r.scorers,
+      submittedAt: r.submitted_at,
+    })),
   };
 }
 
@@ -342,6 +353,10 @@ async function recordResults(req, res, next) {
     await client.query(`DELETE FROM notifications WHERE type = 'match_needs_score' AND related_match_id = $1`, [
       match.id,
     ]);
+
+    // Any pending captain-reported proposals for this match are resolved
+    // now that the official result is in, whether or not they were used.
+    await client.query('DELETE FROM match_score_submissions WHERE match_id = $1', [match.id]);
 
     await client.query('COMMIT');
 
@@ -484,4 +499,121 @@ async function removeRosterEntry(req, res, next) {
   }
 }
 
-module.exports = { list, getOne, recordResults, fetchEffectiveRoster, addRosterEntry, removeRosterEntry };
+// Captain-reported score proposal — never writes to matches/match_rosters
+// directly, only to match_score_submissions. Admin-only recordResults()
+// above is completely unaffected and remains the sole path to an official
+// result; this just gives the admin something to review/prefill from.
+async function submitCaptainScore(req, res, next) {
+  const { homeGoals, awayGoals } = req.body;
+  const scorers = Array.isArray(req.body.scorers) ? req.body.scorers : [];
+
+  if (!Number.isInteger(homeGoals) || homeGoals < 0 || !Number.isInteger(awayGoals) || awayGoals < 0) {
+    return res.status(400).json({ error: 'homeGoals and awayGoals must be non-negative integers' });
+  }
+
+  try {
+    const { rows: matchRows } = await pool.query('SELECT * FROM matches WHERE id = $1', [req.params.id]);
+    const match = matchRows[0];
+    if (!match) return res.status(404).json({ error: 'Match not found' });
+    if (match.status !== 'scheduled') {
+      return res.status(409).json({ error: 'This match already has a recorded result' });
+    }
+
+    const { home_team_id: homeTeamId, away_team_id: awayTeamId } = match;
+
+    // Admins already have recordResults directly — this endpoint is for
+    // whichever team the requester actually captains, not a shortcut for admin.
+    const homePerm = await canEditMatchRoster(pool, req.user, homeTeamId);
+    const awayPerm = await canEditMatchRoster(pool, req.user, awayTeamId);
+    const myTeamId =
+      homePerm.allowed && homePerm.captainOnly
+        ? homeTeamId
+        : awayPerm.allowed && awayPerm.captainOnly
+        ? awayTeamId
+        : null;
+
+    if (!myTeamId) {
+      return res.status(403).json({ error: 'Only a team captain can submit a score for their own team' });
+    }
+
+    const myGoals = myTeamId === homeTeamId ? homeGoals : awayGoals;
+    const cleanScorers = scorers.filter((s) => s && Number.isInteger(s.playerId) && Number.isInteger(s.goals) && s.goals > 0);
+
+    if (cleanScorers.length) {
+      const roster = await fetchEffectiveRoster(pool, req.params.id, myTeamId);
+      const rosterIds = new Set(roster.map((r) => r.player_id));
+      const invalidPlayer = cleanScorers.find((s) => !rosterIds.has(s.playerId));
+      if (invalidPlayer) {
+        return res.status(400).json({ error: "Scorer must be on your team's roster" });
+      }
+    }
+
+    const scorerSum = cleanScorers.reduce((sum, s) => sum + s.goals, 0);
+    if (scorerSum !== myGoals) {
+      return res.status(400).json({ error: 'Scorer goal totals must match the score you entered for your team' });
+    }
+
+    await pool.query(
+      `INSERT INTO match_score_submissions (match_id, team_id, submitted_by, home_goals, away_goals, scorers)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       ON CONFLICT (match_id, team_id) DO UPDATE SET
+         submitted_by = EXCLUDED.submitted_by,
+         home_goals = EXCLUDED.home_goals,
+         away_goals = EXCLUDED.away_goals,
+         scorers = EXCLUDED.scorers,
+         submitted_at = now()`,
+      [req.params.id, myTeamId, req.user.sub, homeGoals, awayGoals, JSON.stringify(cleanScorers)]
+    );
+
+    // If the other team has also submitted, this pair is ready for the
+    // admin to review — notify every admin, whether the two reports agree
+    // or conflict (same dedup pattern ensureAdminSystemNotifications uses
+    // for match_needs_score in notifications.controller.js, so this either
+    // creates or refreshes the existing "needs a score" reminder for each admin).
+    const otherTeamId = myTeamId === homeTeamId ? awayTeamId : homeTeamId;
+    const { rows: otherRows } = await pool.query(
+      'SELECT home_goals, away_goals FROM match_score_submissions WHERE match_id = $1 AND team_id = $2',
+      [req.params.id, otherTeamId]
+    );
+
+    if (otherRows.length) {
+      const other = otherRows[0];
+      const agrees = other.home_goals === homeGoals && other.away_goals === awayGoals;
+
+      const { rows: teamRows } = await pool.query('SELECT id, name FROM teams WHERE id = ANY($1::int[])', [
+        [homeTeamId, awayTeamId],
+      ]);
+      const teamName = (id) => teamRows.find((t) => t.id === id)?.name || 'Team';
+
+      const message = agrees
+        ? `${teamName(homeTeamId)} and ${teamName(awayTeamId)} both reported ${homeGoals}-${awayGoals} (week ${match.week}) — ready to finalize`
+        : `${teamName(myTeamId)} reported ${homeGoals}-${awayGoals}, ${teamName(otherTeamId)} reported ${other.home_goals}-${other.away_goals} (week ${match.week}) — scores don't match, please review`;
+
+      const { rows: admins } = await pool.query("SELECT id FROM users WHERE role = 'admin'");
+      for (const admin of admins) {
+        await pool.query(
+          `INSERT INTO notifications (user_id, type, message, action_url, related_match_id)
+           VALUES ($1, 'match_needs_score', $2, $3, $4)
+           ON CONFLICT (user_id, type, related_match_id) WHERE related_match_id IS NOT NULL
+           DO UPDATE SET is_read = false, message = EXCLUDED.message, action_url = EXCLUDED.action_url`,
+          [admin.id, message, `/schedule/match/${match.id}`, match.id]
+        );
+      }
+    }
+
+    const updated = await fetchMatchWithRosters(pool, req.params.id);
+    res.json(updated);
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = {
+  list,
+  getOne,
+  recordResults,
+  fetchEffectiveRoster,
+  addRosterEntry,
+  removeRosterEntry,
+  submitCaptainScore,
+};

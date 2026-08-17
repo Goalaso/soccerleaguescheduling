@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { formatMatchDate, isMatchOverdue } from '../../utils/season';
+import { formatMatchDate, isMatchOverdue, parseMatchDate } from '../../utils/season';
 
 const DAY_LABELS = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
 
@@ -22,7 +22,7 @@ function CalendarView({ matches, showAll, filterTeamId, onSelectMatch }) {
   );
 
   const sorted = useMemo(
-    () => [...visibleMatches].sort((a, b) => new Date(a.matchDate) - new Date(b.matchDate)),
+    () => [...visibleMatches].sort((a, b) => parseMatchDate(a.matchDate) - parseMatchDate(b.matchDate)),
     [visibleMatches]
   );
   const needsScore = sorted.filter((m) => statusOf(m) === 'needs-score');
@@ -30,14 +30,14 @@ function CalendarView({ matches, showAll, filterTeamId, onSelectMatch }) {
 
   const [monthStart, setMonthStart] = useState(() => {
     const first = needsScore[0] || upcoming[0] || sorted[0];
-    const d = first ? new Date(first.matchDate) : new Date();
+    const d = first ? parseMatchDate(first.matchDate) : new Date();
     return new Date(d.getFullYear(), d.getMonth(), 1);
   });
 
   const matchesByDay = useMemo(() => {
     const map = {};
     sorted.forEach((m) => {
-      const d = new Date(m.matchDate);
+      const d = parseMatchDate(m.matchDate);
       const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
       (map[key] ||= []).push(m);
     });
@@ -96,7 +96,7 @@ function CalendarView({ matches, showAll, filterTeamId, onSelectMatch }) {
                 onClick={() => onSelectMatch(m.id)}
               >
                 <span className="match-card-date">
-                  Mon · {formatMatchDate(new Date(m.matchDate))}
+                  Mon · {formatMatchDate(parseMatchDate(m.matchDate))}
                 </span>
                 <span className="match-card-title">
                   {shortName(m.home.name)} vs {shortName(m.away.name)}
@@ -117,7 +117,7 @@ function CalendarView({ matches, showAll, filterTeamId, onSelectMatch }) {
                 onClick={() => onSelectMatch(m.id)}
               >
                 <span className="match-card-date">
-                  Mon · {formatMatchDate(new Date(m.matchDate))}
+                  Mon · {formatMatchDate(parseMatchDate(m.matchDate))}
                 </span>
                 <span className="match-card-title">
                   {shortName(m.home.name)} vs {shortName(m.away.name)}

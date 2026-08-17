@@ -8,6 +8,7 @@ function ordinal(n) {
 
 function TeamSummaryCard({ team, standing, rank, recentForm, topScorer, variant }) {
   const winRate = standing.mp ? Math.round((standing.w / standing.mp) * 100) : 0;
+  const captain = team.players.find((p) => p.id === team.captainPlayerId);
 
   return (
     <div className="panel team-summary-card" style={{ '--team-color': team.color }}>
@@ -20,6 +21,7 @@ function TeamSummaryCard({ team, standing, rank, recentForm, topScorer, variant 
         <div>
           <h4>{team.name}</h4>
           <p className="team-summary-subtitle">Monday Night League</p>
+          {captain && <p className="team-summary-captain">Captain: {captain.name}</p>}
         </div>
       </div>
 

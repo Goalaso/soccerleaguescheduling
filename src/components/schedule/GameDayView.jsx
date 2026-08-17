@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useMatch } from '../../hooks/useMatch';
 import { useAuth } from '../../context/AuthContext';
-import { formatMatchDate } from '../../utils/season';
+import { formatMatchDate, parseMatchDate, isMatchOverdue } from '../../utils/season';
 
 const POSITION_ABBR = {
   Goalkeeper: 'GK',
@@ -39,8 +39,12 @@ function buildRosterRows(fullRoster, matchPlayers) {
   return [...regularRows, ...guestRows];
 }
 
-function RosterColumn({ team, fullRoster, isMyTeam, scorers, editable, onToggle, toggling }) {
-  const goalsByPlayer = (scorers || [])
+// mode: 'readonly' (opponent, or after the match is played) | 'attendance'
+// (pre-game roll call — checkbox only) | 'scoring' (post-game, this
+// viewer's own team — checkbox + goal steppers combined in one row, same
+// shape as the admin's RecordResultsView roster rows).
+function RosterColumn({ team, fullRoster, isMyTeam, scorers, mode, onToggle, toggling, goalsByPlayer, onGoalChange }) {
+  const recordedGoals = (scorers || [])
     .filter((s) => s.teamId === team.id)
     .reduce((acc, s) => ({ ...acc, [s.playerId]: s.goals }), {});
 
@@ -54,14 +58,50 @@ function RosterColumn({ team, fullRoster, isMyTeam, scorers, editable, onToggle,
           {shortName(team.name).toUpperCase()} — PLAYERS
           {isMyTeam && <span className="badge badge-count gameday-mine-badge">Your Team</span>}
         </span>
-        {editable && (
+        {mode !== 'readonly' && (
           <span className="badge badge-count">
             {confirmedCount} of {rows.length} confirmed
           </span>
         )}
       </div>
-      {rows.map((p) => {
-        const goals = goalsByPlayer[p.id];
+      {mode === 'scoring' && <p className="record-roster-hint">Check who played, tap + to log a goal</p>}
+      {rows.map((p, i) => {
+        if (mode === 'scoring') {
+          const count = goalsByPlayer[p.id] || 0;
+          return (
+            <div className={`record-player-row ${count > 0 ? 'record-player-row-active' : ''}`} key={p.id}>
+              <input
+                type="checkbox"
+                className="attendance-checkbox"
+                checked={p.confirmed}
+                disabled={toggling}
+                onChange={() => onToggle(p.id, p.confirmed)}
+                aria-label={`${p.name} attending`}
+              />
+              <span className="record-player-name">{p.name}</span>
+              <span className="record-player-position">{POSITION_ABBR[p.position]}</span>
+              <button
+                type="button"
+                className="stepper-btn"
+                onClick={() => onGoalChange(p.id, Math.max(0, count - 1))}
+                disabled={!p.confirmed || count === 0}
+              >
+                &minus;
+              </button>
+              <span className="record-player-count">{count}</span>
+              <button
+                type="button"
+                className="stepper-btn"
+                onClick={() => onGoalChange(p.id, count + 1)}
+                disabled={!p.confirmed}
+              >
+                +
+              </button>
+            </div>
+          );
+        }
+
+        const goals = recordedGoals[p.id];
         return (
           <div
             className={`record-player-row record-player-row-readonly ${goals ? 'record-player-row-active' : ''} ${
@@ -69,7 +109,7 @@ function RosterColumn({ team, fullRoster, isMyTeam, scorers, editable, onToggle,
             }`}
             key={p.id}
           >
-            {editable ? (
+            {mode === 'attendance' ? (
               <input
                 type="checkbox"
                 className="attendance-checkbox"
@@ -96,21 +136,63 @@ function GameDayView({ myTeamId, teams }) {
   const { id } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { match, loading, addToRoster, removeFromRoster } = useMatch(id);
+  const { match, loading, addToRoster, removeFromRoster, submitCaptainScore } = useMatch(id);
   const [toggling, setToggling] = useState(false);
+  const [goalsByPlayer, setGoalsByPlayer] = useState({});
+  const [otherGoals, setOtherGoals] = useState(0);
+  const [scoreError, setScoreError] = useState(null);
+  const [submittingScore, setSubmittingScore] = useState(false);
+
+  const captainOfTeamIds = user?.captainOfTeamIds || [];
+  const myCaptainedTeamId = match
+    ? [match.home.id, match.away.id].find((teamId) => captainOfTeamIds.includes(teamId))
+    : null;
+
+  // Hydrate from an existing pending submission (e.g. re-opening the page,
+  // or correcting a mistake) — runs once per match/captaincy, not on every
+  // keystroke, since goalsByPlayer/otherGoals are otherwise purely local
+  // state until "Submit Score" is pressed.
+  useEffect(() => {
+    if (!match || !myCaptainedTeamId) return;
+    const mySubmission = (match.scoreSubmissions || []).find((s) => s.teamId === myCaptainedTeamId);
+    if (!mySubmission) return;
+    const isHome = myCaptainedTeamId === match.home.id;
+    setGoalsByPlayer(mySubmission.scorers.reduce((acc, s) => ({ ...acc, [s.playerId]: s.goals }), {}));
+    setOtherGoals(isHome ? mySubmission.awayGoals : mySubmission.homeGoals);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [match?.id, myCaptainedTeamId]);
 
   if (loading || !match) {
     return <p className="auth-loading">Loading...</p>;
   }
 
   const played = match.status === 'played';
-  const captainOfTeamIds = user?.captainOfTeamIds || [];
+  const canSubmitScore = !played && !!myCaptainedTeamId && isMatchOverdue(match);
+  const isHome = myCaptainedTeamId === match.home.id;
+  const otherTeam = isHome ? match.away : match.home;
+  const otherSubmission = (match.scoreSubmissions || []).find((s) => s.teamId === otherTeam.id);
+  const mySubmission = (match.scoreSubmissions || []).find((s) => s.teamId === myCaptainedTeamId);
+
+  const myTotal = Object.values(goalsByPlayer).reduce((sum, v) => sum + v, 0);
+
+  const getColumnMode = (teamId) => {
+    if (played) return 'readonly';
+    if (teamId === myCaptainedTeamId && canSubmitScore) return 'scoring';
+    if (captainOfTeamIds.includes(teamId)) return 'attendance';
+    return 'readonly';
+  };
 
   const handleToggle = async (teamId, playerId, confirmed) => {
     setToggling(true);
     try {
       if (confirmed) {
         await removeFromRoster(playerId, teamId);
+        // Nothing to credit a goal to once they're not confirmed anymore.
+        setGoalsByPlayer((prev) => {
+          const next = { ...prev };
+          delete next[playerId];
+          return next;
+        });
       } else {
         await addToRoster(playerId, teamId, 'regular');
       }
@@ -118,6 +200,33 @@ function GameDayView({ myTeamId, teams }) {
       setToggling(false);
     }
   };
+
+  const handleSubmitScore = async () => {
+    setScoreError(null);
+    setSubmittingScore(true);
+    try {
+      const scorers = Object.entries(goalsByPlayer)
+        .filter(([, g]) => g > 0)
+        .map(([playerId, goals]) => ({ playerId: Number(playerId), goals }));
+      const homeGoals = isHome ? myTotal : otherGoals;
+      const awayGoals = isHome ? otherGoals : myTotal;
+      await submitCaptainScore({ homeGoals, awayGoals, scorers });
+    } catch (err) {
+      setScoreError(err.message);
+    } finally {
+      setSubmittingScore(false);
+    }
+  };
+
+  let scoreStatus = null;
+  if (canSubmitScore && mySubmission && otherSubmission) {
+    const agree = mySubmission.homeGoals === otherSubmission.homeGoals && mySubmission.awayGoals === otherSubmission.awayGoals;
+    scoreStatus = agree
+      ? 'Both teams reported the same score — sent to the admin to finalize.'
+      : "Scores don't match — flagged for the admin to review.";
+  } else if (canSubmitScore && mySubmission) {
+    scoreStatus = `You reported ${mySubmission.homeGoals}-${mySubmission.awayGoals}. Waiting on ${otherTeam.name}.`;
+  }
 
   const homeFullRoster = teams?.find((t) => t.id === match.home.id)?.players;
   const awayFullRoster = teams?.find((t) => t.id === match.away.id)?.players;
@@ -129,8 +238,20 @@ function GameDayView({ myTeamId, teams }) {
           &lt; Calendar
         </button>
         <span className="notify-breadcrumb-title">Gameday</span>
-        <span className="generated-subtitle">Mon · {fullDate(new Date(match.matchDate))}</span>
+        <span className="generated-subtitle">Mon · {fullDate(parseMatchDate(match.matchDate))}</span>
+        {canSubmitScore && (
+          <button
+            className="pill-btn pill-btn-blue notify-send-btn"
+            onClick={handleSubmitScore}
+            disabled={submittingScore}
+          >
+            {submittingScore ? 'Submitting...' : 'Submit Score'}
+          </button>
+        )}
       </div>
+
+      {scoreError && <p className="options-warning">{scoreError}</p>}
+      {scoreStatus && <p className="empty-state-subtitle">{scoreStatus}</p>}
 
       <div className="panel record-score-header">
         <span className="record-score-team">{match.home.name}</span>
@@ -139,6 +260,34 @@ function GameDayView({ myTeamId, teams }) {
             <span className="record-score-box">{match.homeGoals}</span>
             <span>:</span>
             <span className="record-score-box">{match.awayGoals}</span>
+          </div>
+        ) : canSubmitScore ? (
+          <div className="record-score-boxes">
+            {isHome ? (
+              <>
+                <span className="record-score-box">{myTotal}</span>
+                <span>:</span>
+                <input
+                  type="number"
+                  min="0"
+                  className="record-score-box record-score-box-input"
+                  value={otherGoals}
+                  onChange={(e) => setOtherGoals(Math.max(0, Number(e.target.value) || 0))}
+                />
+              </>
+            ) : (
+              <>
+                <input
+                  type="number"
+                  min="0"
+                  className="record-score-box record-score-box-input"
+                  value={otherGoals}
+                  onChange={(e) => setOtherGoals(Math.max(0, Number(e.target.value) || 0))}
+                />
+                <span>:</span>
+                <span className="record-score-box">{myTotal}</span>
+              </>
+            )}
           </div>
         ) : (
           <span className="badge badge-count">Scheduled</span>
@@ -152,18 +301,22 @@ function GameDayView({ myTeamId, teams }) {
           fullRoster={homeFullRoster}
           isMyTeam={match.home.id === myTeamId}
           scorers={match.scorers}
-          editable={!played && captainOfTeamIds.includes(match.home.id)}
+          mode={getColumnMode(match.home.id)}
           onToggle={(playerId, confirmed) => handleToggle(match.home.id, playerId, confirmed)}
           toggling={toggling}
+          goalsByPlayer={goalsByPlayer}
+          onGoalChange={(playerId, val) => setGoalsByPlayer((prev) => ({ ...prev, [playerId]: val }))}
         />
         <RosterColumn
           team={match.away}
           fullRoster={awayFullRoster}
           isMyTeam={match.away.id === myTeamId}
           scorers={match.scorers}
-          editable={!played && captainOfTeamIds.includes(match.away.id)}
+          mode={getColumnMode(match.away.id)}
           onToggle={(playerId, confirmed) => handleToggle(match.away.id, playerId, confirmed)}
           toggling={toggling}
+          goalsByPlayer={goalsByPlayer}
+          onGoalChange={(playerId, val) => setGoalsByPlayer((prev) => ({ ...prev, [playerId]: val }))}
         />
       </div>
     </div>

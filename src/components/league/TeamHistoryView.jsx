@@ -1,6 +1,7 @@
 import React from 'react';
 import TeamSummaryCard from './TeamSummaryCard';
 import MatchHistoryList from './MatchHistoryList';
+import TeamPlayersPanel from './TeamPlayersPanel';
 
 function TeamHistoryView({
   team,
@@ -9,9 +10,11 @@ function TeamHistoryView({
   recentForm,
   topScorer,
   matches,
+  teamGoals,
+  gamesPlayedByPlayer,
   onBack,
   onGoToProfile,
-  onGoToPlayerStats,
+  onSelectMatch,
 }) {
   return (
     <div className="league-section">
@@ -24,16 +27,13 @@ function TeamHistoryView({
           Monday Night League · Winter 2026
         </span>
         <div className="league-breadcrumb-actions">
-          <button className="outline-btn" onClick={onGoToPlayerStats}>
-            Player Stats
-          </button>
           <button className="pill-btn pill-btn-blue" onClick={onGoToProfile}>
             Team Page &rarr;
           </button>
         </div>
       </div>
 
-      <div className="league-grid">
+      <div className="team-history-grid">
         <TeamSummaryCard
           team={team}
           standing={standing}
@@ -42,7 +42,8 @@ function TeamHistoryView({
           topScorer={topScorer}
           variant="history"
         />
-        <MatchHistoryList team={team} matches={matches} />
+        <MatchHistoryList team={team} matches={matches} onSelectMatch={onSelectMatch} />
+        <TeamPlayersPanel players={team.players} teamGoals={teamGoals} gamesPlayedByPlayer={gamesPlayedByPlayer} />
       </div>
     </div>
   );
