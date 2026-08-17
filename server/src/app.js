@@ -13,6 +13,19 @@ const errorHandler = require('./middleware/errorHandler');
 
 const app = express();
 
+// Every response here depends on who's asking (the session cookie) and can
+// change from one request to the next — Express's default ETag generation
+// (on by default, including for error bodies like a 404) lets a browser
+// cache one of these and keep reusing it via 304 revalidation forever,
+// completely independent of whether the underlying data has since become
+// correct. An authenticated, stateful API like this must never be
+// browser-cacheable at all.
+app.set('etag', false);
+app.use((req, res, next) => {
+  res.set('Cache-Control', 'no-store');
+  next();
+});
+
 app.use(
   cors({
     origin: process.env.CLIENT_ORIGIN || 'http://localhost:3000',

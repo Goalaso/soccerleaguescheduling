@@ -51,6 +51,19 @@ export function SelectedSeasonProvider({ children }) {
 
   const selectedSeason = browsableSeasons.find((s) => s.id === selectedSeasonId) || null;
 
+  // leaguesLoading/seasonsLoading alone miss a real gap: once a list finishes
+  // loading, there's a render (or more) before the effects above actually
+  // pick a default id. During that window selectedLeagueId/selectedSeasonId
+  // are still null, but downstream queries gated on them (usePublishedTeams,
+  // useMatches) are *disabled* rather than loading — a disabled query reports
+  // isLoading:false, not true — so every loading flag a consumer checks can
+  // read false at once with no real data resolved yet. Same class of bug as
+  // the SchedulePage/CalendarView fix, one layer further upstream, shared by
+  // every consumer of this context.
+  const leaguePending = !leaguesLoading && leagues.length > 0 && selectedLeagueId == null;
+  const seasonPending =
+    !seasonsLoading && browsableSeasons.length > 0 && !browsableSeasons.some((s) => s.id === selectedSeasonId);
+
   const value = {
     leagues,
     selectedLeagueId,
@@ -59,7 +72,7 @@ export function SelectedSeasonProvider({ children }) {
     selectedSeasonId,
     setSelectedSeasonId,
     selectedSeason,
-    loading: leaguesLoading || seasonsLoading,
+    loading: leaguesLoading || leaguePending || seasonsLoading || seasonPending,
   };
 
   return <SelectedSeasonContext.Provider value={value}>{children}</SelectedSeasonContext.Provider>;
