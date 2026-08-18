@@ -25,6 +25,15 @@
   margin-bottom: 1.5rem;
 }
 
+.team-names-input-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.team-names-input-row .select-input {
+  flex: 1;
+}
+
 .option-label {
   display: block;
   font-size: 0.75rem;
@@ -95,6 +104,14 @@
 
 .team-card-header h4 {
   color: var(--team-color, var(--accent));
+}
+
+.team-name-input {
+  flex: 1;
+  margin-right: 0.75rem;
+  font-weight: 700;
+  color: var(--team-color, var(--accent));
+  padding: 0.3rem 0.5rem;
 }
 
 .team-avg-badge {

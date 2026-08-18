@@ -109,6 +109,6 @@ async function sendEmail({ to, subject, body }) {
 // didn't happen to open the app — has a real cost: a missed availability
 // deadline. Adding a future type is a one-line addition here, same pattern
 // as ACTIONABLE_NOTIFICATION_TYPES on the frontend.
-const EMAIL_NOTIFIED_TYPES = ['season_availability_request'];
+const EMAIL_NOTIFIED_TYPES = ['season_availability_request', 'season_confirmed', 'season_waitlisted'];
 
 module.exports = { getAccessToken, sendEmail, graphFetch, EMAIL_NOTIFIED_TYPES };

@@ -13,11 +13,20 @@ function skillBarClass(skill) {
   return 'skill-bar-low';
 }
 
-function TeamCard({ team, editing, otherTeams, onMove, onRemove }) {
+function TeamCard({ team, editing, otherTeams, onMove, onRemove, onRename }) {
   return (
     <div className="team-card-v2" style={{ '--team-color': team.color }}>
       <div className="team-card-header">
-        <h4>{team.name}</h4>
+        {editing ? (
+          <input
+            className="select-input team-name-input"
+            value={team.name}
+            onChange={(e) => onRename(e.target.value)}
+            aria-label="Team name"
+          />
+        ) : (
+          <h4>{team.name}</h4>
+        )}
         <span className="team-avg-badge">Avg {team.avgSkill}</span>
       </div>
 

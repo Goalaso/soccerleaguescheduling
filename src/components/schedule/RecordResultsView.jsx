@@ -60,11 +60,11 @@ function RosterColumn({ team, goalsByPlayer, onChange }) {
 
 // Admin-only match-day roster editor: confirm/unconfirm each team's regular
 // roster (same toggle a captain does), plus add a sub (available this
-// season, not on any team) or borrow a player from the other team playing
-// this match. Works before the match (assigning subs) or after a score's
+// season, not on any team) or borrow a player from any other team in the
+// season. Works before the match (assigning subs) or after a score's
 // already recorded (in-game swap bookkeeping/correction) — it's just
 // "edit this match's roster," usable any time this screen is open.
-function RosterManager({ match, teams, seasonId, addToRoster, removeFromRoster }) {
+function RosterManager({ match, teams, seasonId, matches, addToRoster, removeFromRoster }) {
   const [expanded, setExpanded] = useState(false);
   const [picks, setPicks] = useState({});
   const [busy, setBusy] = useState(false);
@@ -75,6 +75,39 @@ function RosterManager({ match, teams, seasonId, addToRoster, removeFromRoster }
   const fullRosterFor = (teamId) => teams.find((t) => t.id === teamId)?.players || [];
   const rosteredIds = new Set(teams.flatMap((t) => t.players.map((p) => p.id)));
   const subPool = availability.filter((p) => p.isAvailable && !rosteredIds.has(p.playerId));
+  const seasonAvailableIds = new Set(availability.filter((p) => p.isAvailable).map((p) => p.playerId));
+
+  // "Checked in today" count for a team not playing in this match — looked
+  // up from its own match this same round (every match in a round plays
+  // simultaneously, same reasoning the backend uses to clear a borrowed
+  // player from their own team's match). null if that team has a bye.
+  const todayCountFor = (teamId) => {
+    const theirMatch = (matches || []).find(
+      (m) => m.week === match.week && m.id !== match.id && (m.home.id === teamId || m.away.id === teamId)
+    );
+    if (!theirMatch) return null;
+    return theirMatch.home.id === teamId ? theirMatch.home.confirmedCount : theirMatch.away.confirmedCount;
+  };
+
+  // A sub already placed on one of THIS match's two teams (the only teams a
+  // sub can be added to) still shows up in the other team's dropdown — per
+  // design, don't hide them, just make it obvious where they currently are.
+  const subPlacement = {};
+  [match.home, match.away].forEach((t) => {
+    t.players
+      .filter((p) => p.source === 'sub')
+      .forEach((p) => {
+        subPlacement[p.id] = { teamName: t.name, count: t.players.length };
+      });
+  });
+
+  const candidateLabel = (c) => {
+    if (c.source === 'sub') {
+      const placed = subPlacement[c.id];
+      return placed ? `${c.name} (sub) (${placed.teamName}, ${placed.count})` : `${c.name} (sub)`;
+    }
+    return c.count != null ? `${c.name} (${c.teamName}, ${c.count})` : `${c.name} (${c.teamName})`;
+  };
 
   const handleToggleRegular = async (teamId, playerId, confirmed) => {
     setBusy(true);
@@ -108,14 +141,36 @@ function RosterManager({ match, teams, seasonId, addToRoster, removeFromRoster }
     }
   };
 
-  const renderTeam = (team, otherTeamId) => {
+  const renderTeam = (team) => {
     const fullRoster = fullRosterFor(team.id);
     const confirmedIds = new Set(team.players.map((p) => p.id));
     const guests = team.players.filter((p) => p.source !== 'regular');
-    const borrowable = fullRosterFor(otherTeamId).filter((p) => !confirmedIds.has(p.id));
+
+    const borrowable = teams
+      .filter((t) => t.id !== team.id)
+      .flatMap((t) => {
+        if (t.id === match.home.id || t.id === match.away.id) {
+          // Playing in this match — only offer players actually checked in
+          // for today, not just anyone on the team's season roster. Count
+          // is live (this match's own fetched data), not the possibly-stale
+          // season list, since it's kept in sync with every add/remove here.
+          const matchTeam = t.id === match.home.id ? match.home : match.away;
+          const attendingIds = new Set(matchTeam.players.map((p) => p.id));
+          return t.players
+            .filter((p) => attendingIds.has(p.id))
+            .map((p) => ({ ...p, teamName: t.name, count: matchTeam.players.length }));
+        }
+        // Not playing this match — no per-match attendance signal exists for
+        // them, so fall back to season availability (same signal subPool uses).
+        return t.players
+          .filter((p) => seasonAvailableIds.has(p.id))
+          .map((p) => ({ ...p, teamName: t.name, count: todayCountFor(t.id) }));
+      })
+      .filter((p) => !confirmedIds.has(p.id));
+
     const candidates = [
       ...subPool.map((p) => ({ id: p.playerId, name: p.name, source: 'sub' })),
-      ...borrowable.map((p) => ({ id: p.id, name: p.name, source: 'borrowed' })),
+      ...borrowable.map((p) => ({ id: p.id, name: p.name, source: 'borrowed', teamName: p.teamName, count: p.count })),
     ];
 
     return (
@@ -151,7 +206,7 @@ function RosterManager({ match, teams, seasonId, addToRoster, removeFromRoster }
             <option value="">Add sub or borrowed player...</option>
             {candidates.map((c) => (
               <option key={`${c.source}-${c.id}`} value={`${c.source}:${c.id}`}>
-                {c.name} ({c.source})
+                {candidateLabel(c)}
               </option>
             ))}
           </select>
@@ -170,8 +225,8 @@ function RosterManager({ match, teams, seasonId, addToRoster, removeFromRoster }
       </button>
       {expanded && (
         <div className="roster-manager-grid">
-          {renderTeam(match.home, match.away.id)}
-          {renderTeam(match.away, match.home.id)}
+          {renderTeam(match.home)}
+          {renderTeam(match.away)}
         </div>
       )}
     </div>
@@ -420,6 +475,7 @@ function RecordResultsView({ matches, teams, seasonId, onResultsSaved }) {
         match={match}
         teams={teams}
         seasonId={seasonId}
+        matches={matches}
         addToRoster={addToRoster}
         removeFromRoster={removeFromRoster}
       />

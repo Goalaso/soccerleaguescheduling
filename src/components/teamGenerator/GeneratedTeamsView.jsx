@@ -12,6 +12,7 @@ function GeneratedTeamsView({
   onMovePlayer,
   onRemovePlayer,
   onAddPlayer,
+  onRenameTeam,
 }) {
   const [editing, setEditing] = useState(false);
 
@@ -53,6 +54,7 @@ function GeneratedTeamsView({
             otherTeams={teams.filter((t) => t.id !== team.id)}
             onMove={(playerId, toTeamId) => onMovePlayer(playerId, team.id, toTeamId)}
             onRemove={(playerId) => onRemovePlayer(playerId, team.id)}
+            onRename={(name) => onRenameTeam(team.id, name)}
           />
         ))}
       </div>

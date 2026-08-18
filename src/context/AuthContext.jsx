@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { apiGet, apiPost, apiPatch, apiDelete } from '../api/client';
 
@@ -9,7 +9,15 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // Plain fetch, not a useQuery — so unlike every other data hook in this
+  // app, nothing here dedupes React 18 StrictMode's dev-only double-invoke
+  // of this effect. Without this guard, every page load fires the request
+  // twice (visible in the Network tab as two /me calls).
+  const checkedAuthRef = useRef(false);
   useEffect(() => {
+    if (checkedAuthRef.current) return;
+    checkedAuthRef.current = true;
+
     apiGet('/auth/me')
       .then((data) => setUser(data.user))
       .catch((err) => {
@@ -63,10 +71,13 @@ export function AuthProvider({ children }) {
 
   // Not a credential change, unlike updateAccount above — updates local
   // state directly instead of round-tripping through /auth/me for a fresh
-  // user object.
+  // user object. The endpoint only echoes back whatever field(s) the caller
+  // actually sent (a partial update), so merge rather than overwrite —
+  // AccountSettingsPanel and CreateSeasonView's "Save as Default" each only
+  // ever send the one field they own.
   const updatePreferences = async (payload) => {
     const data = await apiPatch('/auth/me/preferences', payload);
-    setUser((prev) => ({ ...prev, emailNotificationsEnabled: data.emailNotificationsEnabled }));
+    setUser((prev) => ({ ...prev, ...data }));
     return data;
   };
 

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ConfirmPasswordModal from '../ConfirmPasswordModal';
+import { useSelectedSeason } from '../../context/SelectedSeasonContext';
 
 function statusLabel(status) {
   return status === 'collecting_availability' ? 'Collecting Availability' : 'Teams Generated';
@@ -8,11 +9,21 @@ function statusLabel(status) {
 
 function SeasonsListView({ seasons, loading, deleteSeason }) {
   const navigate = useNavigate();
+  const { setSelectedLeagueId, setSelectedSeasonId } = useSelectedSeason();
   const [pendingDelete, setPendingDelete] = useState(null);
 
   const handleConfirmDelete = async (password) => {
     await deleteSeason(pendingDelete.id, password);
     setPendingDelete(null);
+  };
+
+  // /league/standings always reflects whatever SelectedSeasonContext
+  // currently has selected, not anything encoded in the URL — so getting to
+  // *this* season's standings means selecting it first, then navigating.
+  const handleViewStandings = (season) => {
+    setSelectedLeagueId(season.leagueId);
+    setSelectedSeasonId(season.id);
+    navigate('/league/standings');
   };
 
   return (
@@ -50,7 +61,7 @@ function SeasonsListView({ seasons, loading, deleteSeason }) {
                   Review Availability
                 </button>
               ) : (
-                <button className="outline-btn" onClick={() => navigate('/league/standings')}>
+                <button className="outline-btn" onClick={() => handleViewStandings(s)}>
                   View Standings
                 </button>
               )}

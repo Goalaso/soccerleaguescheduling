@@ -2,7 +2,7 @@ const bcrypt = require('bcryptjs');
 const pool = require('../db/pool');
 const { signToken } = require('../utils/jwt');
 const { validatePlayerProfile, normalizeLeagueIds } = require('../utils/validation');
-const { seedAvailability } = require('./seasons.controller');
+const { resolveAvailability, sendAvailabilityOutcomeEmail, sendPromotionEmail } = require('./seasons.controller');
 
 const COOKIE_OPTIONS = {
   httpOnly: true,
@@ -23,12 +23,15 @@ async function getCaptainOfTeamIds(userId) {
 }
 
 async function publicUser(user) {
-  // Fetched fresh rather than threading email_notifications_enabled through
-  // every SELECT at every call site (register/login/me/updateMe all pass a
-  // partial user row here) — one extra query, same shape as the
-  // captainOfTeamIds lookup right below it.
+  // Fetched fresh rather than threading these through every SELECT at every
+  // call site (register/login/me/updateMe all pass a partial user row here)
+  // — one extra query, same shape as the captainOfTeamIds lookup right
+  // below it. defaultTeamNames survives a localStorage wipe or a switch to
+  // a different browser/device, unlike a client-only preference — it's
+  // useful for any admin creating a season, but harmless to fetch/ignore
+  // for a player account too, so it's not worth branching on role here.
   const [{ rows: prefRows }, captainOfTeamIds] = await Promise.all([
-    pool.query('SELECT email_notifications_enabled FROM users WHERE id = $1', [user.id]),
+    pool.query('SELECT email_notifications_enabled, default_team_names FROM users WHERE id = $1', [user.id]),
     getCaptainOfTeamIds(user.id),
   ]);
   return {
@@ -37,6 +40,7 @@ async function publicUser(user) {
     name: user.name,
     role: user.role,
     emailNotificationsEnabled: prefRows[0]?.email_notifications_enabled ?? true,
+    defaultTeamNames: prefRows[0]?.default_team_names || [],
     captainOfTeamIds,
   };
 }
@@ -53,6 +57,7 @@ async function register(req, res, next) {
   }
 
   const client = await pool.connect();
+  const availabilityResults = [];
   try {
     const passwordHash = await bcrypt.hash(password, 10);
     const lowerEmail = email.toLowerCase();
@@ -120,20 +125,38 @@ async function register(req, res, next) {
         // immediate regardless, but season_availability only gets seeded
         // once, at season-creation time — without this, signing up mid-season
         // would otherwise mean waiting for the *next* season to be eligible
-        // for anything, even for someone who did everything right.
+        // for anything, even for someone who did everything right. Goes
+        // through resolveAvailability (respectCapacity+allowCreate) rather
+        // than a plain seed, so a fresh signup can't bypass the same FCFS
+        // queue an existing player responding to an ask has to go through.
         if (joinSet.has(leagueId)) {
           const { rows: openSeasonRows } = await client.query(
             `SELECT id FROM seasons WHERE league_id = $1 AND status = 'collecting_availability'`,
             [leagueId]
           );
           if (openSeasonRows[0]) {
-            await seedAvailability(client, openSeasonRows[0].id, playerId, user.id);
+            const result = await resolveAvailability(client, openSeasonRows[0].id, playerId, true, user.id, {
+              respectCapacity: true,
+              allowCreate: true,
+            });
+            if (result) availabilityResults.push(result);
           }
         }
       }
     }
 
     await client.query('COMMIT');
+
+    // Best-effort, after commit — a slow/failed Outlook call must never
+    // fail registration, which has already succeeded by this point.
+    try {
+      for (const result of availabilityResults) {
+        await sendAvailabilityOutcomeEmail(result);
+        await sendPromotionEmail(result);
+      }
+    } catch (err) {
+      console.error('Failed to send season availability outcome emails', err);
+    }
 
     const token = signToken(user);
     res.cookie('token', token, COOKIE_OPTIONS);
@@ -266,18 +289,38 @@ async function updateMe(req, res, next) {
 }
 
 // Not a credential change (unlike updateMe above), so no currentPassword
-// friction — just a preference toggle.
+// friction — just preference toggles. Each field is independently
+// optional (COALESCE-style) rather than requiring the full set on every
+// call, since AccountSettingsPanel and CreateSeasonView's "Save as
+// Default" button each only ever send the one field they own.
 async function updatePreferences(req, res, next) {
-  const { emailNotificationsEnabled } = req.body;
-  if (typeof emailNotificationsEnabled !== 'boolean') {
+  const { emailNotificationsEnabled, defaultTeamNames } = req.body;
+  if (emailNotificationsEnabled === undefined && defaultTeamNames === undefined) {
+    return res.status(400).json({ error: 'Provide emailNotificationsEnabled and/or defaultTeamNames' });
+  }
+  if (emailNotificationsEnabled !== undefined && typeof emailNotificationsEnabled !== 'boolean') {
     return res.status(400).json({ error: 'emailNotificationsEnabled must be a boolean' });
   }
+  if (defaultTeamNames !== undefined && !Array.isArray(defaultTeamNames)) {
+    return res.status(400).json({ error: 'defaultTeamNames must be an array of strings' });
+  }
+
+  const cleanedTeamNames = defaultTeamNames
+    ? defaultTeamNames.map((n) => (typeof n === 'string' ? n.trim() : '')).filter(Boolean)
+    : undefined;
+
   try {
-    await pool.query('UPDATE users SET email_notifications_enabled = $1 WHERE id = $2', [
+    await pool.query(
+      `UPDATE users SET
+         email_notifications_enabled = COALESCE($1, email_notifications_enabled),
+         default_team_names = COALESCE($2, default_team_names)
+       WHERE id = $3`,
+      [emailNotificationsEnabled ?? null, cleanedTeamNames ?? null, req.user.sub]
+    );
+    res.json({
       emailNotificationsEnabled,
-      req.user.sub,
-    ]);
-    res.json({ emailNotificationsEnabled });
+      defaultTeamNames: cleanedTeamNames,
+    });
   } catch (err) {
     next(err);
   }

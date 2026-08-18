@@ -1,34 +1,59 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
 
-const TEAM_COUNT_CHOICES = [2, 4, 6, 8];
 const PLAYERS_PER_TEAM_CHOICES = [6, 8, 10, 12];
+
+function parseTeamNames(raw) {
+  return raw
+    .split(',')
+    .map((n) => n.trim())
+    .filter(Boolean);
+}
 
 function CreateSeasonView({ leagues, createSeason }) {
   const navigate = useNavigate();
+  const { user, updatePreferences } = useAuth();
   const [leagueId, setLeagueId] = useState(leagues[0]?.id ?? '');
   const [name, setName] = useState('');
   const [startsOn, setStartsOn] = useState('');
-  const [numTeams, setNumTeams] = useState(4);
+  // Saved server-side (users.default_team_names), not localStorage — an
+  // admin's default should follow their account across devices/browsers,
+  // not disappear the first time local storage gets cleared.
+  const [teamNamesInput, setTeamNamesInput] = useState(() => (user?.defaultTeamNames || []).join(', '));
   const [playersPerTeam, setPlayersPerTeam] = useState(10);
-  const [balanceBySkill, setBalanceBySkill] = useState(true);
-  const [balanceByAge, setBalanceByAge] = useState(false);
-  const [balanceByPosition, setBalanceByPosition] = useState(false);
   const [error, setError] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const [savedDefault, setSavedDefault] = useState(false);
+  const [savingDefault, setSavingDefault] = useState(false);
+
+  const teamNames = parseTeamNames(teamNamesInput);
+
+  const handleSaveDefault = async () => {
+    setSavingDefault(true);
+    try {
+      await updatePreferences({ defaultTeamNames: teamNames });
+      setSavedDefault(true);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSavingDefault(false);
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError(null);
+    if (teamNames.length === 0) {
+      setError('Enter at least one team name.');
+      return;
+    }
     setSubmitting(true);
     try {
       const season = await createSeason({
         leagueId: Number(leagueId),
-        numTeams,
+        teamNames,
         playersPerTeam,
-        balanceBySkill,
-        balanceByAge,
-        balanceByPosition,
         name: name || undefined,
         startsOn: startsOn || undefined,
       });
@@ -81,18 +106,26 @@ function CreateSeasonView({ leagues, createSeason }) {
         </div>
 
         <div className="option-group">
-          <span className="option-label">Number of Teams</span>
-          <select
-            className="select-input"
-            value={numTeams}
-            onChange={(e) => setNumTeams(Number(e.target.value))}
-          >
-            {TEAM_COUNT_CHOICES.map((n) => (
-              <option key={n} value={n}>
-                {n} teams
-              </option>
-            ))}
-          </select>
+          <span className="option-label">Team Names (comma separated)</span>
+          <div className="team-names-input-row">
+            <input
+              className="select-input"
+              placeholder="e.g. Panthers, Wolves, Eagles, Hawks"
+              value={teamNamesInput}
+              onChange={(e) => {
+                setTeamNamesInput(e.target.value);
+                setSavedDefault(false);
+              }}
+            />
+            <button type="button" className="outline-btn" onClick={handleSaveDefault} disabled={savingDefault}>
+              {savingDefault ? 'Saving...' : savedDefault ? 'Saved!' : 'Save as Default'}
+            </button>
+          </div>
+          {teamNames.length > 0 && (
+            <p className="empty-state-subtitle">
+              {teamNames.length} team{teamNames.length === 1 ? '' : 's'}: {teamNames.join(', ')}
+            </p>
+          )}
         </div>
 
         <div className="option-group">
@@ -108,43 +141,6 @@ function CreateSeasonView({ leagues, createSeason }) {
               </option>
             ))}
           </select>
-        </div>
-
-        <div className="option-group">
-          <span className="option-label">Balance Teams By</span>
-
-          <label className="checkbox-row">
-            <input
-              type="checkbox"
-              checked={balanceBySkill}
-              onChange={(e) => setBalanceBySkill(e.target.checked)}
-            />
-            <span>
-              <span className="checkbox-title">Skill rating</span>
-            </span>
-          </label>
-
-          <label className="checkbox-row">
-            <input
-              type="checkbox"
-              checked={balanceByAge}
-              onChange={(e) => setBalanceByAge(e.target.checked)}
-            />
-            <span>
-              <span className="checkbox-title">Age</span>
-            </span>
-          </label>
-
-          <label className="checkbox-row">
-            <input
-              type="checkbox"
-              checked={balanceByPosition}
-              onChange={(e) => setBalanceByPosition(e.target.checked)}
-            />
-            <span>
-              <span className="checkbox-title">Preferred position</span>
-            </span>
-          </label>
         </div>
 
         {error && <p className="options-warning">{error}</p>}

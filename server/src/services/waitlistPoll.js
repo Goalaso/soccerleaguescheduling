@@ -1,6 +1,6 @@
 const pool = require('../db/pool');
 const { graphFetch, sendEmail } = require('./email');
-const { resolveAvailability } = require('../controllers/seasons.controller');
+const { resolveAvailability, sendPromotionEmail } = require('../controllers/seasons.controller');
 
 const AUTO_SENDER_PATTERN = /noreply|no-reply|mailer-daemon/i;
 
@@ -75,17 +75,35 @@ async function handleAvailabilityReply(message, parsed) {
   const player = playerRows[0];
   if (!player) return;
 
-  const row = await resolveAvailability(pool, parsed.seasonId, parsed.playerId, parsed.isAvailable, player.user_id);
-  if (row && from) {
+  const result = await resolveAvailability(pool, parsed.seasonId, parsed.playerId, parsed.isAvailable, player.user_id, {
+    respectCapacity: true,
+  });
+  if (!result) return;
+
+  // A self-composed, outcome-aware reply to the message they actually sent
+  // — not the generic season_confirmed/waitlisted email sendAvailabilityOutcomeEmail
+  // would send, which would be a redundant second email for this channel.
+  if (from) {
+    const body =
+      result.outcome === 'confirmed'
+        ? `Got it — you're confirmed for ${result.seasonLabel}. See you on the field!`
+        : result.outcome === 'waitlisted'
+          ? `Got it — season's full right now, so you're #${result.waitlistPosition} on the waitlist for ${result.seasonLabel}. We'll email you if a spot opens.`
+          : `Got it — you're marked as not available. Thanks for letting us know!`;
     try {
-      await sendEmail({
-        to: from,
-        subject: `Re: ${message.subject || 'Availability'}`,
-        body: `Got it — you're marked as ${parsed.isAvailable ? 'available' : 'not available'}. Thanks for letting us know!`,
-      });
+      await sendEmail({ to: from, subject: `Re: ${message.subject || 'Availability'}`, body });
     } catch (err) {
       console.error('Failed to send availability confirmation reply', err);
     }
+  }
+
+  // Still notify anyone who got auto-promoted as a side effect of this
+  // reply (e.g. a decline freeing up a spot) — independent of the reply
+  // above, which is about the sender, not the promoted player.
+  try {
+    await sendPromotionEmail(result);
+  } catch (err) {
+    console.error('Failed to send waitlist promotion email', err);
   }
 }
 

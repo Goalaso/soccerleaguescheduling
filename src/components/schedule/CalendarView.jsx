@@ -12,6 +12,28 @@ function statusOf(match) {
   return isMatchOverdue(match) ? 'needs-score' : 'upcoming';
 }
 
+// Same "real roster if touched, else season roster size" fallback as
+// fetchEffectiveRoster server-side — confirmedCount already reflects that,
+// this just combines both sides into one "how many people today" figure,
+// used for the whole-day tally (a round can have several simultaneous games).
+function matchConfirmedTotal(match) {
+  return (match.home.confirmedCount || 0) + (match.away.confirmedCount || 0);
+}
+
+// Per-match display — the admin wants each team's own count, not a combined
+// total, to judge at a glance whether a team has spares to lend out or is
+// short and might need to borrow: "10 Delta vs Alpha 9". The counts are
+// styled apart from the team names (muted, own span) so "10" and "9" don't
+// read as part of the matchup text itself.
+function Matchup({ match }) {
+  return (
+    <>
+      <span className="calendar-count">{match.home.confirmedCount}</span> {shortName(match.home.name)} vs{' '}
+      {shortName(match.away.name)} <span className="calendar-count">{match.away.confirmedCount}</span>
+    </>
+  );
+}
+
 function CalendarView({ matches, showAll, filterTeamId, onSelectMatch }) {
   const visibleMatches = useMemo(
     () =>
@@ -62,6 +84,20 @@ function CalendarView({ matches, showAll, filterTeamId, onSelectMatch }) {
     });
     return map;
   }, [sorted]);
+
+  // Matchday tally — every match on a given date plays simultaneously (a
+  // round), so this is the total headcount for that whole day, not just
+  // one game — useful for a day with several fields going at once.
+  const dayTotals = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.entries(matchesByDay).map(([key, dayMatches]) => [
+          key,
+          dayMatches.reduce((sum, m) => sum + matchConfirmedTotal(m), 0),
+        ])
+      ),
+    [matchesByDay]
+  );
 
   const year = monthStart.getFullYear();
   const month = monthStart.getMonth();
@@ -118,7 +154,7 @@ function CalendarView({ matches, showAll, filterTeamId, onSelectMatch }) {
                   Mon · {formatMatchDate(parseMatchDate(m.matchDate))}
                 </span>
                 <span className="match-card-title">
-                  {shortName(m.home.name)} vs {shortName(m.away.name)}
+                  <Matchup match={m} />
                 </span>
                 <span className="match-card-status status-needs">● Pending</span>
               </button>
@@ -139,7 +175,7 @@ function CalendarView({ matches, showAll, filterTeamId, onSelectMatch }) {
                   Mon · {formatMatchDate(parseMatchDate(m.matchDate))}
                 </span>
                 <span className="match-card-title">
-                  {shortName(m.home.name)} vs {shortName(m.away.name)}
+                  <Matchup match={m} />
                 </span>
                 <span className="match-card-status status-upcoming">Scheduled</span>
               </button>
@@ -168,20 +204,34 @@ function CalendarView({ matches, showAll, filterTeamId, onSelectMatch }) {
             </div>
           ))}
           {cells.map((day, i) => {
-            const dayMatches = day ? matchesByDay[`${year}-${month}-${day}`] || [] : [];
+            const dayKey = day ? `${year}-${month}-${day}` : null;
+            const dayMatches = dayKey ? matchesByDay[dayKey] || [] : [];
             return (
               <div
                 className={`calendar-cell ${day ? '' : 'calendar-cell-empty'} ${isToday(day) ? 'calendar-cell-today' : ''}`}
-                key={day ? `${year}-${month}-${day}` : `empty-${i}`}
+                key={dayKey || `empty-${i}`}
               >
-                {day && <span className="calendar-day-number">{day}</span>}
+                {day && (
+                  <span className="calendar-day-number">
+                    {day}
+                    {dayMatches.length > 0 && (
+                      <span className="calendar-day-tally">{dayTotals[dayKey]} confirmed</span>
+                    )}
+                  </span>
+                )}
                 {dayMatches.map((m) => (
                   <button
                     key={m.id}
                     className={`calendar-chip calendar-chip-${statusOf(m)} calendar-chip-clickable`}
                     onClick={() => onSelectMatch(m.id)}
                   >
-                    {shortName(m.home.name)} vs {shortName(m.away.name)}
+                    {statusOf(m) === 'recorded' ? (
+                      <>
+                        {shortName(m.home.name)} {m.homeGoals}-{m.awayGoals} {shortName(m.away.name)}
+                      </>
+                    ) : (
+                      <Matchup match={m} />
+                    )}
                   </button>
                 ))}
               </div>

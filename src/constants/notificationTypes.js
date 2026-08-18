@@ -5,6 +5,10 @@ export const NOTIFICATION_TYPES = {
   // resolving action for the player to take, so it's deliberately not in
   // ACTIONABLE_NOTIFICATION_TYPES below and keeps normal mark-read/delete.
   TEAM_ROSTER_CHANGED: 'team_roster_changed',
+  // Follow-up to responding "yes" on a season_availability_request, once
+  // the FCFS capacity check resolves — also purely informational.
+  SEASON_CONFIRMED: 'season_confirmed',
+  SEASON_WAITLISTED: 'season_waitlisted',
 };
 
 // Types here resolve only through their own action (responding to an

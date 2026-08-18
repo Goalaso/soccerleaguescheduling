@@ -28,11 +28,14 @@ function SeasonTeamGenerator({ onPublished }) {
 
   const { season } = useSeason(seasonId);
   const { players: availability, loading: availabilityLoading } = useSeasonAvailability(seasonId);
-  const {
-    teams: savedTeams,
-    loading: publishedLoading,
-    publish,
-  } = usePublishedTeams(season?.status === 'teams_generated' ? seasonId : null);
+  // Always the real seasonId, not conditional on status — publishing is
+  // exactly the action that flips status to 'teams_generated', so gating
+  // this on that status being already true meant the publish mutation's
+  // own request body would send seasonId: null right when it mattered.
+  // Querying "already published teams" before any exist is harmless
+  // (fetchSeasonTeams returns an empty teams array, not an error) as long
+  // as the season itself is real, which it always is here.
+  const { teams: savedTeams, loading: publishedLoading, publish } = usePublishedTeams(seasonId);
 
   const eligiblePlayers = availability
     .filter((p) => p.isAvailable)
@@ -62,7 +65,11 @@ function SeasonTeamGenerator({ onPublished }) {
     if (publishedLoading || hydratedRef.current) return;
     hydratedRef.current = true;
 
-    if (savedTeams) {
+    // savedTeams is now always an array (never null — see the seasonId
+    // change above), so an unpublished season returns [] rather than null;
+    // .length distinguishes "genuinely nothing published yet" from "already
+    // published," which a plain truthy check on an array can't.
+    if (savedTeams && savedTeams.length > 0) {
       setTeams(savedTeams);
       setIsPublished(true);
       setTeamToggles(savedTeams.reduce((acc, t) => ({ ...acc, [t.id]: true }), {}));
@@ -80,6 +87,7 @@ function SeasonTeamGenerator({ onPublished }) {
   const fullOptions = {
     numTeams: season.numTeams,
     playersPerTeam: season.playersPerTeam,
+    teamNames: season.teamNames,
     ...options,
   };
 
@@ -130,6 +138,10 @@ function SeasonTeamGenerator({ onPublished }) {
       if (!player) return prev;
       return prev.map((t) => (t.id === teamId ? summarizeTeam({ ...t, players: [...t.players, player] }) : t));
     });
+  };
+
+  const handleRenameTeam = (teamId, name) => {
+    setTeams((prev) => prev.map((t) => (t.id === teamId ? { ...t, name } : t)));
   };
 
   const toggleDeliveryMethod = (method) => setDeliveryMethods((prev) => ({ ...prev, [method]: !prev[method] }));
@@ -208,6 +220,7 @@ function SeasonTeamGenerator({ onPublished }) {
                   onMovePlayer={handleMovePlayer}
                   onRemovePlayer={handleRemovePlayer}
                   onAddPlayer={handleAddPlayer}
+                  onRenameTeam={handleRenameTeam}
                 />
               ) : (
                 <Navigate to={basePath} replace />

@@ -42,6 +42,37 @@ async function fetchMatchesForSeason(db, seasonId) {
     return acc;
   }, {});
 
+  // "Confirmed today" per team per match — same fallback semantics as
+  // fetchEffectiveRoster (real match_rosters rows if the roster's been
+  // touched, else the team's season roster size), just as a count instead
+  // of full rows, so this stays two bulk queries instead of one per match.
+  const rosterCountRows = matchIds.length
+    ? (
+        await db.query(
+          `SELECT match_id, team_id, COUNT(*)::int AS cnt FROM match_rosters
+           WHERE match_id = ANY($1::int[]) GROUP BY match_id, team_id`,
+          [matchIds]
+        )
+      ).rows
+    : [];
+  const rosterCountByMatchTeam = Object.fromEntries(
+    rosterCountRows.map((r) => [`${r.match_id}:${r.team_id}`, r.cnt])
+  );
+
+  const teamIds = [...new Set(matchRows.flatMap((m) => [m.home_team_id, m.away_team_id]))];
+  const teamPlayerCountRows = teamIds.length
+    ? (
+        await db.query(
+          `SELECT team_id, COUNT(*)::int AS cnt FROM team_players WHERE team_id = ANY($1::int[]) GROUP BY team_id`,
+          [teamIds]
+        )
+      ).rows
+    : [];
+  const teamPlayerCountByTeam = Object.fromEntries(teamPlayerCountRows.map((r) => [r.team_id, r.cnt]));
+
+  const confirmedCountFor = (matchId, teamId) =>
+    rosterCountByMatchTeam[`${matchId}:${teamId}`] ?? teamPlayerCountByTeam[teamId] ?? 0;
+
   return matchRows.map((m) => ({
     id: m.id,
     week: m.week,
@@ -49,8 +80,18 @@ async function fetchMatchesForSeason(db, seasonId) {
     status: m.status,
     homeGoals: m.home_goals,
     awayGoals: m.away_goals,
-    home: { id: m.home_id, name: m.home_name, color: m.home_color },
-    away: { id: m.away_id, name: m.away_name, color: m.away_color },
+    home: {
+      id: m.home_id,
+      name: m.home_name,
+      color: m.home_color,
+      confirmedCount: confirmedCountFor(m.id, m.home_id),
+    },
+    away: {
+      id: m.away_id,
+      name: m.away_name,
+      color: m.away_color,
+      confirmedCount: confirmedCountFor(m.id, m.away_id),
+    },
     scorers: scorersByMatch[m.id] || [],
   }));
 }
@@ -104,6 +145,24 @@ async function list(req, res, next) {
     return res.status(400).json({ error: 'seasonId is required' });
   }
 
+  try {
+    // Fast path — true for every season after its schedule has ever been
+    // generated once, i.e. almost always: just fetch it, no lock or
+    // transaction at all. The BEGIN/FOR UPDATE/COMMIT dance below exists
+    // only to safely auto-generate a schedule the *first* time it's
+    // needed; paying for that lock on every subsequent read (unconditional
+    // before this) is why this endpoint was consistently slower than
+    // sibling endpoints doing one simple query.
+    const existingMatches = await fetchMatchesForSeason(pool, seasonId);
+    if (existingMatches.length > 0) {
+      return res.json({ matches: existingMatches });
+    }
+  } catch (err) {
+    return next(err);
+  }
+
+  // Slow path — no matches yet, so either this season doesn't exist, or it
+  // does but genuinely needs its schedule generated for the first time.
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -208,11 +267,29 @@ async function materializeRosterIfEmpty(db, matchId, teamId) {
     [matchId, teamId]
   );
   if (existing.length) return;
+  // ON CONFLICT DO NOTHING: a player being restored here from a borrow
+  // elsewhere may already have a live row for this match (just on a
+  // different team_id) — the PK is (match_id, player_id), so re-inserting
+  // them as part of this team's batch would otherwise violate it.
   await db.query(
     `INSERT INTO match_rosters (match_id, team_id, player_id, source)
-     SELECT $1, team_id, player_id, 'regular' FROM team_players WHERE team_id = $2`,
+     SELECT $1, team_id, player_id, 'regular' FROM team_players WHERE team_id = $2
+     ON CONFLICT (match_id, player_id) DO NOTHING`,
     [matchId, teamId]
   );
+}
+
+// A team plays at most one match per round (season_id + week) in a
+// round-robin schedule — used to find/clear a borrowed player's own match
+// this round, since two simultaneous matches on different fields mean they
+// can't be rostered on both at once.
+async function findTeamMatchInRound(db, seasonId, week, teamId, excludeMatchId) {
+  const { rows } = await db.query(
+    `SELECT id FROM matches WHERE season_id = $1 AND week = $2 AND id != $3
+       AND (home_team_id = $4 OR away_team_id = $4)`,
+    [seasonId, week, excludeMatchId, teamId]
+  );
+  return rows[0]?.id || null;
 }
 
 // Match + scorers (fetchMatchById) plus both teams' effective match-day
@@ -429,22 +506,52 @@ async function addRosterEntry(req, res, next) {
     // the team's regular roster materialized first, same reasoning as below.
     await materializeRosterIfEmpty(pool, req.params.id, teamId);
 
-    // A player can only be on one side of a match — the PK enforces this,
-    // but check first for a clear error instead of a raw constraint violation.
+    // A player can only be on one side of a match — the PK enforces this.
+    // Only block the cross-team case for the plain 'regular' source (a
+    // clear error beats a raw constraint violation for accidental
+    // data-entry mistakes); 'sub'/'borrowed' are expected to move a
+    // player's row to a new team, that's the whole point of borrowing.
     const { rows: existingRows } = await pool.query(
       'SELECT team_id FROM match_rosters WHERE match_id = $1 AND player_id = $2',
       [req.params.id, playerId]
     );
-    if (existingRows.length && existingRows[0].team_id !== teamId) {
+    if (source === 'regular' && existingRows.length && existingRows[0].team_id !== teamId) {
       return res.status(409).json({ error: "That player is already on the other team's roster for this match" });
     }
 
     await pool.query(
       `INSERT INTO match_rosters (match_id, team_id, player_id, source, added_by)
        VALUES ($1, $2, $3, $4, $5)
-       ON CONFLICT (match_id, player_id) DO UPDATE SET source = EXCLUDED.source, added_by = EXCLUDED.added_by`,
+       ON CONFLICT (match_id, player_id) DO UPDATE SET team_id = EXCLUDED.team_id, source = EXCLUDED.source, added_by = EXCLUDED.added_by`,
       [req.params.id, teamId, playerId, source, req.user.sub]
     );
+
+    if (source === 'borrowed') {
+      const { rows: homeTeamRows } = await pool.query('SELECT team_id FROM team_players WHERE player_id = $1', [
+        playerId,
+      ]);
+      const homeTeamId = homeTeamRows[0]?.team_id;
+      if (homeTeamId && homeTeamId !== teamId) {
+        if (homeTeamId === match.home_team_id || homeTeamId === match.away_team_id) {
+          // Home team is playing in this same match — materialize it (safe
+          // now that materializeRosterIfEmpty is conflict-tolerant) so its
+          // read-side fallback stops listing this player once they're moved.
+          await materializeRosterIfEmpty(pool, match.id, homeTeamId);
+        } else {
+          // Every match in a round plays simultaneously on a different
+          // field — a borrowed player can't also be rostered on their own
+          // team's match this same round, so clear them from it if one exists.
+          const conflictMatchId = await findTeamMatchInRound(pool, match.season_id, match.week, homeTeamId, match.id);
+          if (conflictMatchId) {
+            await materializeRosterIfEmpty(pool, conflictMatchId, homeTeamId);
+            await pool.query('DELETE FROM match_rosters WHERE match_id = $1 AND player_id = $2', [
+              conflictMatchId,
+              playerId,
+            ]);
+          }
+        }
+      }
+    }
 
     const updated = await fetchMatchWithRosters(pool, req.params.id);
     res.json(updated);
@@ -485,6 +592,49 @@ async function removeRosterEntry(req, res, next) {
     if (!existing) return res.status(404).json({ error: 'Roster entry not found' });
     if (perm.captainOnly && existing.source !== 'regular') {
       return res.status(403).json({ error: 'Only admins can remove subs or borrowed players' });
+    }
+
+    if (existing.source === 'borrowed') {
+      // Undo both sides of the loan rather than just deleting: put the
+      // player back where they actually belong, instead of leaving them
+      // rostered nowhere (or, worse, silently reappearing via fallback).
+      const { rows: homeTeamRows } = await pool.query('SELECT team_id FROM team_players WHERE player_id = $1', [
+        req.params.playerId,
+      ]);
+      const homeTeamId = homeTeamRows[0]?.team_id;
+
+      if (homeTeamId && (homeTeamId === match.home_team_id || homeTeamId === match.away_team_id)) {
+        // On loan from one of this match's own two teams — move the row back in place.
+        await materializeRosterIfEmpty(pool, req.params.id, homeTeamId);
+        await pool.query(
+          `UPDATE match_rosters SET team_id = $1, source = 'regular', added_by = $2 WHERE match_id = $3 AND player_id = $4`,
+          [homeTeamId, req.user.sub, req.params.id, req.params.playerId]
+        );
+        const updated = await fetchMatchWithRosters(pool, req.params.id);
+        return res.json(updated);
+      }
+
+      await pool.query('DELETE FROM match_rosters WHERE match_id = $1 AND player_id = $2', [
+        req.params.id,
+        req.params.playerId,
+      ]);
+
+      if (homeTeamId) {
+        // On loan from a third team — restore them to that team's own match this round, if it has one.
+        const ownMatchId = await findTeamMatchInRound(pool, match.season_id, match.week, homeTeamId, req.params.id);
+        if (ownMatchId) {
+          await materializeRosterIfEmpty(pool, ownMatchId, homeTeamId);
+          await pool.query(
+            `INSERT INTO match_rosters (match_id, team_id, player_id, source, added_by)
+             VALUES ($1, $2, $3, 'regular', $4)
+             ON CONFLICT (match_id, player_id) DO UPDATE SET team_id = EXCLUDED.team_id, source = 'regular', added_by = EXCLUDED.added_by`,
+            [ownMatchId, homeTeamId, req.params.playerId, req.user.sub]
+          );
+        }
+      }
+
+      const updated = await fetchMatchWithRosters(pool, req.params.id);
+      return res.json(updated);
     }
 
     await pool.query('DELETE FROM match_rosters WHERE match_id = $1 AND player_id = $2', [

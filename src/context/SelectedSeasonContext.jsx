@@ -19,19 +19,25 @@ export function SelectedSeasonProvider({ children }) {
     setSelectedLeagueId(leagues[0].id);
   }, [leaguesLoading, leagues, selectedLeagueId]);
 
-  const { seasons, loading: seasonsLoading, refetch: refetchSeasons } = useSeasons(selectedLeagueId);
+  const { seasons, loading: seasonsLoading, error: seasonsError, refetch: refetchSeasons } = useSeasons(
+    selectedLeagueId
+  );
 
   // /api/seasons requires auth. This provider mounts app-wide, so it starts
   // fetching immediately — including before the user has logged in (e.g.
   // while still on /login), which 401s and leaves selectedSeasonId stuck at
-  // null with nothing to retry it. Re-fetch whenever login completes.
+  // null with nothing to retry it. Re-fetch whenever login completes — but
+  // only if the earlier attempt actually failed; otherwise this fired an
+  // unconditional, redundant second /seasons request on every single page
+  // load, even ones with an already-valid session where the first request
+  // succeeded fine (visible as a duplicate seasons?leagueId=X call).
   const wasLoggedIn = useRef(false);
   useEffect(() => {
-    if (user && !wasLoggedIn.current) {
+    if (user && !wasLoggedIn.current && seasonsError) {
       refetchSeasons();
     }
     wasLoggedIn.current = !!user;
-  }, [user, refetchSeasons]);
+  }, [user, seasonsError, refetchSeasons]);
 
   const browsableSeasons = useMemo(
     () => seasons.filter((s) => s.status === 'teams_generated'),

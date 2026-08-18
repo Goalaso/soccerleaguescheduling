@@ -14,6 +14,15 @@ export function useMatch(matchId) {
     // Recording a result (or editing who played) changes standings/schedule
     // for every season's match list, not just this one match.
     queryClient.invalidateQueries({ queryKey: ['matches'] });
+    // A borrow/return can also silently touch a DIFFERENT match's roster —
+    // the borrowed player's own team's match this same round gets cleared
+    // or restored server-side (see addRosterEntry/removeRosterEntry). That
+    // other match has its own separate ['match', otherId] cache entry that
+    // this request never told about the change, so invalidate every
+    // single-match entry rather than just this one — otherwise navigating
+    // to that other match shows its stale, pre-borrow roster until a hard
+    // refresh bypasses the cache entirely.
+    queryClient.invalidateQueries({ queryKey: ['match'] });
   };
 
   const submitMutation = useMutation({

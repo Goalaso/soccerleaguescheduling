@@ -15,6 +15,7 @@ function AuthPage() {
   const [mode, setMode] = useState('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [name, setName] = useState('');
   const [position, setPosition] = useState('');
   const [skill, setSkill] = useState('');
@@ -60,6 +61,10 @@ function AuthPage() {
 
     if (mode === 'register' && leagueIds.length === 0) {
       setError('Select at least one league.');
+      return;
+    }
+    if (mode === 'register' && password !== confirmPassword) {
+      setError('Passwords do not match.');
       return;
     }
 
@@ -145,6 +150,20 @@ function AuthPage() {
                 minLength={8}
               />
             </div>
+
+            {mode === 'register' && (
+              <div className="option-group">
+                <span className="option-label">Confirm Password</span>
+                <input
+                  className="select-input"
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  required
+                  minLength={8}
+                />
+              </div>
+            )}
 
             {mode === 'register' && (
               <>

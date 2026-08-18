@@ -10,6 +10,14 @@ function AvailabilityReviewView({ onTeamsGenerated }) {
   const { players, loading, setAvailability } = useSeasonAvailability(seasonId);
 
   const availableCount = players.filter((p) => p.isAvailable).length;
+  // Position isn't stored — it's just response order among waitlisted
+  // players, same as how the notification's position is computed server-side.
+  const waitlistPositionByPlayer = Object.fromEntries(
+    players
+      .filter((p) => p.waitlisted)
+      .sort((a, b) => new Date(a.respondedAt) - new Date(b.respondedAt))
+      .map((p, i) => [p.playerId, i + 1])
+  );
 
   return (
     <div className="panel players-panel">
@@ -50,6 +58,11 @@ function AvailabilityReviewView({ onTeamsGenerated }) {
                   >
                     {p.isAvailable ? '✓' : ''}
                   </button>
+                  {p.waitlisted && (
+                    <span className="badge badge-count" style={{ marginLeft: '0.5rem' }}>
+                      Waitlisted (#{waitlistPositionByPlayer[p.playerId]})
+                    </span>
+                  )}
                 </span>
               </div>
             ))}

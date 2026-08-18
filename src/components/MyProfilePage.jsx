@@ -309,10 +309,10 @@ function MyProfilePage() {
         onAction={() => navigate('/')}
       />
       <div className="generator-content">
-        <AccountSettingsPanel />
         <div className="league-section">
           <PlayerProfilePanel />
         </div>
+        <AccountSettingsPanel />
       </div>
     </>
   );

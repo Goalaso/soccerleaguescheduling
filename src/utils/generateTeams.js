@@ -64,6 +64,7 @@ export function generateTeams(allPlayers, options) {
     balanceBySkill,
     balanceByAge,
     balanceByPosition,
+    teamNames,
   } = options;
 
   const needed = numTeams * playersPerTeam;
@@ -71,9 +72,13 @@ export function generateTeams(allPlayers, options) {
     .slice(0, Math.min(needed, allPlayers.length))
     .map((player) => ({ ...player, score: scorePlayer(player, balanceBySkill, balanceByAge) }));
 
+  // A season set its own names at creation time (see CreateSeasonView) —
+  // used verbatim, no "Team " prefix injected, since that's exactly what
+  // was typed. Falls back to the default Alpha/Bravo/... scheme when none
+  // were set (older seasons, or the non-season-scoped generator flow).
   const teams = Array.from({ length: numTeams }, (_, index) => ({
     id: index,
-    name: `Team ${TEAM_NAMES[index] || index + 1}`,
+    name: teamNames?.[index] || `Team ${TEAM_NAMES[index] || index + 1}`,
     color: TEAM_COLORS[index % TEAM_COLORS.length],
     players: [],
   }));
