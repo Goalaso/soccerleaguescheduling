@@ -2,6 +2,7 @@ const bcrypt = require('bcryptjs');
 const pool = require('../db/pool');
 const { signToken } = require('../utils/jwt');
 const { validatePlayerProfile, normalizeLeagueIds } = require('../utils/validation');
+const { seedAvailability } = require('./seasons.controller');
 
 const COOKIE_OPTIONS = {
   httpOnly: true,
@@ -22,17 +23,26 @@ async function getCaptainOfTeamIds(userId) {
 }
 
 async function publicUser(user) {
+  // Fetched fresh rather than threading email_notifications_enabled through
+  // every SELECT at every call site (register/login/me/updateMe all pass a
+  // partial user row here) — one extra query, same shape as the
+  // captainOfTeamIds lookup right below it.
+  const [{ rows: prefRows }, captainOfTeamIds] = await Promise.all([
+    pool.query('SELECT email_notifications_enabled FROM users WHERE id = $1', [user.id]),
+    getCaptainOfTeamIds(user.id),
+  ]);
   return {
     id: user.id,
     email: user.email,
     name: user.name,
     role: user.role,
-    captainOfTeamIds: await getCaptainOfTeamIds(user.id),
+    emailNotificationsEnabled: prefRows[0]?.email_notifications_enabled ?? true,
+    captainOfTeamIds,
   };
 }
 
 async function register(req, res, next) {
-  const { email, password, name, position, skill, age, leagueIds } = req.body;
+  const { email, password, name, position, skill, age, leagueIds, joinSeasonLeagueIds } = req.body;
 
   if (!email || !password || !name) {
     return res.status(400).json({ error: 'email, password, and name are required' });
@@ -98,12 +108,28 @@ async function register(req, res, next) {
         [user.id, name, position, skill, age, lowerEmail]
       );
       const playerId = playerRows[0].id;
+      const joinSet = new Set((joinSeasonLeagueIds || []).map(Number));
 
       for (const leagueId of normalizedLeagueIds) {
         await client.query(
           'INSERT INTO player_leagues (player_id, league_id) VALUES ($1, $2)',
           [playerId, leagueId]
         );
+
+        // Visible opt-in, not silent auto-add: player_leagues membership is
+        // immediate regardless, but season_availability only gets seeded
+        // once, at season-creation time — without this, signing up mid-season
+        // would otherwise mean waiting for the *next* season to be eligible
+        // for anything, even for someone who did everything right.
+        if (joinSet.has(leagueId)) {
+          const { rows: openSeasonRows } = await client.query(
+            `SELECT id FROM seasons WHERE league_id = $1 AND status = 'collecting_availability'`,
+            [leagueId]
+          );
+          if (openSeasonRows[0]) {
+            await seedAvailability(client, openSeasonRows[0].id, playerId, user.id);
+          }
+        }
       }
     }
 
@@ -239,6 +265,24 @@ async function updateMe(req, res, next) {
   }
 }
 
+// Not a credential change (unlike updateMe above), so no currentPassword
+// friction — just a preference toggle.
+async function updatePreferences(req, res, next) {
+  const { emailNotificationsEnabled } = req.body;
+  if (typeof emailNotificationsEnabled !== 'boolean') {
+    return res.status(400).json({ error: 'emailNotificationsEnabled must be a boolean' });
+  }
+  try {
+    await pool.query('UPDATE users SET email_notifications_enabled = $1 WHERE id = $2', [
+      emailNotificationsEnabled,
+      req.user.sub,
+    ]);
+    res.json({ emailNotificationsEnabled });
+  } catch (err) {
+    next(err);
+  }
+}
+
 // Self-service account deletion, players only — an admin deleting their own
 // account would leave devLoginAsAdmin (which grabs "the first admin row")
 // with nothing to find and no recovery path short of reseeding the DB.
@@ -273,4 +317,4 @@ async function deleteMe(req, res, next) {
   }
 }
 
-module.exports = { register, login, logout, me, updateMe, deleteMe, devLoginAsAdmin };
+module.exports = { register, login, logout, me, updateMe, updatePreferences, deleteMe, devLoginAsAdmin };

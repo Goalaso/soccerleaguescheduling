@@ -181,6 +181,51 @@
   cursor: pointer;
 }
 
+.join-season-row {
+  margin-left: 1.6rem;
+  margin-top: -0.4rem;
+}
+
+.join-season-row .checkbox-title {
+  font-size: 0.85rem;
+  color: var(--text-soft);
+}
+
+.waitlist-message-panel {
+  margin-bottom: 1.5rem;
+}
+
+.waitlist-message-subject {
+  font-weight: 700;
+  margin-top: 0.4rem;
+}
+
+.waitlist-message-snippet {
+  color: var(--text-soft);
+  margin-top: 0.3rem;
+  white-space: pre-wrap;
+}
+
+.waitlist-alert-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  margin-top: 0.75rem;
+  padding: 0.75rem 1rem;
+  border-radius: 6px;
+  border: 1px solid var(--warning-text);
+  background: rgba(242, 153, 74, 0.08);
+  color: var(--warning-text);
+  font-weight: 600;
+  font: inherit;
+  cursor: pointer;
+}
+
+.waitlist-alert-go {
+  font-weight: 700;
+}
+
 .checkbox-row input {
   margin-top: 0.2rem;
   accent-color: var(--accent);

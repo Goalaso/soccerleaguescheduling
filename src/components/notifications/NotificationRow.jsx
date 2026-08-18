@@ -43,7 +43,7 @@ function NotificationRow({ notification: n, markRead, remove, respondToSeasonAva
         {!isActionable && !n.isRead && (
           <button
             type="button"
-            className="notification-icon-btn"
+            className="notification-icon-btn notification-icon-btn-check"
             title="Mark as read"
             onClick={() => markRead(n.id)}
           >
@@ -51,7 +51,12 @@ function NotificationRow({ notification: n, markRead, remove, respondToSeasonAva
           </button>
         )}
         {!isActionable && (
-          <button type="button" className="notification-icon-btn" title="Delete" onClick={() => remove(n.id)}>
+          <button
+            type="button"
+            className="notification-icon-btn notification-icon-btn-remove"
+            title="Delete"
+            onClick={() => remove(n.id)}
+          >
             ✕
           </button>
         )}

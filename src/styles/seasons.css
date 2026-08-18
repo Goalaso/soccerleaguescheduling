@@ -67,6 +67,11 @@
   margin-bottom: 1.5rem;
 }
 
+.notifications-scroll {
+  max-height: 216px;
+  overflow-y: auto;
+}
+
 .notification-row {
   display: flex;
   align-items: center;
@@ -111,4 +116,14 @@
 .notification-icon-btn:hover {
   color: white;
   border-color: var(--accent);
+}
+
+.notification-icon-btn-check:hover {
+  color: var(--success-solid);
+  border-color: var(--success-solid);
+}
+
+.notification-icon-btn-remove:hover {
+  color: var(--danger-solid);
+  border-color: var(--danger-solid);
 }

@@ -6,6 +6,7 @@ const {
   getAvailability,
   setAvailability,
   setMyAvailability,
+  addAvailability,
   remove,
 } = require('../controllers/seasons.controller');
 const { requireAuth, requireRole } = require('../middleware/auth');
@@ -17,6 +18,7 @@ router.get('/:id', requireAuth, getOne);
 router.post('/', requireAuth, requireRole('admin'), create);
 router.delete('/:id', requireAuth, requireRole('admin'), remove);
 router.get('/:id/availability', requireAuth, requireRole('admin'), getAvailability);
+router.post('/:id/availability', requireAuth, requireRole('admin'), addAvailability);
 // Order matters: the literal "me" route must be registered before the
 // generic :playerId route below, or "me" would be captured as a playerId.
 router.patch('/:id/availability/me', requireAuth, setMyAvailability);

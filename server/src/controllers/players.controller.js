@@ -125,6 +125,22 @@ async function create(req, res, next) {
   try {
     await client.query('BEGIN');
 
+    // Unlike self-registration (which links to an existing admin-added
+    // player instead of duplicating), this form has no such check today —
+    // an admin adding someone who (unknown to them) already has a player
+    // row would otherwise silently create a second record with the same
+    // email. Surface it instead of guessing what the admin meant.
+    const { rows: existingRows } = await client.query('SELECT id, name FROM players WHERE lower(email) = $1', [
+      email.toLowerCase(),
+    ]);
+    if (existingRows[0]) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({
+        error: `A player named "${existingRows[0].name}" already exists with this email.`,
+        existingPlayerId: existingRows[0].id,
+      });
+    }
+
     const { leagueIds: normalizedLeagueIds, error: leaguesError } = await normalizeLeagueIds(
       client,
       leagueIds

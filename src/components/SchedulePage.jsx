@@ -15,11 +15,14 @@ import { useSelectedSeason } from '../context/SelectedSeasonContext';
 function SchedulePage() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
   const { selectedSeasonId, loading: seasonLoading } = useSelectedSeason();
   const { teams, loading: teamsLoading } = usePublishedTeams(selectedSeasonId);
   const { matches, loading: matchesLoading, refetch } = useMatches(selectedSeasonId);
-  const { profile, loading: profileLoading } = useMyProfile();
-  const isAdmin = user?.role === 'admin';
+  // An admin has no linked player row — myTeam/filterTeamId are meaningless
+  // for them anyway (showAll={isAdmin} already bypasses the filter below),
+  // so skip the request entirely rather than let it 404 on every mount.
+  const { profile, loading: profileLoading } = useMyProfile({ enabled: !isAdmin });
 
   const myTeam = teams?.find((t) => t.players.some((p) => p.id === profile?.id));
 
@@ -27,14 +30,15 @@ function SchedulePage() {
   // and if profile resolves slower than the other three (real network
   // latency in production, rarely noticeable on localhost), the calendar
   // can render before it's ready and filter out every match for a
-  // non-admin viewer, even though their data is actually fine.
+  // non-admin viewer, even though their data is actually fine. Disabled
+  // (admin) counts as immediately "not loading," not stuck loading forever.
   const loading = seasonLoading || teamsLoading || matchesLoading || profileLoading;
 
   return (
     <>
       <PageBanner
-        title="Record Results"
-        subtitle="Edit/record results for games"
+        title={isAdmin ? 'Record Results' : 'Schedule & Results'}
+        subtitle={isAdmin ? 'Edit/record results for games' : "View your team's schedule and game results"}
         actionLabel="< Back to Home"
         onAction={() => navigate('/')}
       />

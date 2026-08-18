@@ -8,21 +8,25 @@ function NotificationsPanel() {
 
   return (
     <div className="panel notifications-panel">
-      <h3 className="panel-title">Needs Your Attention</h3>
+      <h3 className="panel-title">
+        Needs Your Attention{notifications.length > 0 ? ` (${notifications.length})` : ''}
+      </h3>
       {loading ? (
         <p className="auth-loading">Loading...</p>
       ) : notifications.length === 0 ? (
         <p className="empty-state-subtitle">You're all caught up — nothing pending right now.</p>
       ) : (
-        notifications.map((n) => (
-          <NotificationRow
-            key={n.id}
-            notification={n}
-            markRead={markRead}
-            remove={remove}
-            respondToSeasonAvailability={respondToSeasonAvailability}
-          />
-        ))
+        <div className="notifications-scroll">
+          {notifications.map((n) => (
+            <NotificationRow
+              key={n.id}
+              notification={n}
+              markRead={markRead}
+              remove={remove}
+              respondToSeasonAvailability={respondToSeasonAvailability}
+            />
+          ))}
+        </div>
       )}
       <Link to="/notifications" className="link-btn notifications-view-all">
         View all notifications &gt;

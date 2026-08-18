@@ -22,9 +22,14 @@ function PlayerListView({ players, loading, deletePlayer }) {
     <div className="panel players-panel manage-players-panel">
       <div className="players-panel-header">
         <h3 className="panel-title">Manage Players ({players.length})</h3>
-        <button className="pill-btn pill-btn-blue" onClick={() => navigate('/players/add')}>
-          Add Player
-        </button>
+        <div className="league-breadcrumb-actions">
+          <button className="outline-btn" onClick={() => navigate('/players/waitlist')}>
+            Waitlist
+          </button>
+          <button className="pill-btn pill-btn-blue" onClick={() => navigate('/players/add')}>
+            Add Player
+          </button>
+        </div>
       </div>
 
       {loading ? (

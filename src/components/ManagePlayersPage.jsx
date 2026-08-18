@@ -3,6 +3,7 @@ import { Routes, Route, useNavigate } from 'react-router-dom';
 import PageBanner from './PageBanner';
 import PlayerListView from './managePlayers/PlayerListView';
 import PlayerFormView from './managePlayers/PlayerFormView';
+import WaitlistView from './managePlayers/WaitlistView';
 import { usePlayers } from '../hooks/usePlayers';
 import { useLeagues } from '../hooks/useLeagues';
 
@@ -49,6 +50,7 @@ function ManagePlayersPage() {
               />
             }
           />
+          <Route path="waitlist" element={<WaitlistView />} />
         </Routes>
       </div>
     </>

@@ -21,7 +21,7 @@ const EMPTY_VALUES = {
 
 function AccountSettingsPanel() {
   const navigate = useNavigate();
-  const { user, updateAccount, deleteAccount } = useAuth();
+  const { user, updateAccount, updatePreferences, deleteAccount } = useAuth();
   const [email, setEmail] = useState(user?.email || '');
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -30,6 +30,16 @@ function AccountSettingsPanel() {
   const [saved, setSaved] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [prefBusy, setPrefBusy] = useState(false);
+
+  const handleToggleEmailNotifications = async () => {
+    setPrefBusy(true);
+    try {
+      await updatePreferences({ emailNotificationsEnabled: !user.emailNotificationsEnabled });
+    } finally {
+      setPrefBusy(false);
+    }
+  };
 
   const handleDeleteAccount = async (password) => {
     await deleteAccount(password);
@@ -133,6 +143,18 @@ function AccountSettingsPanel() {
           {submitting ? 'Saving...' : 'Update Account'}
         </button>
       </form>
+
+      <label className="checkbox-row">
+        <input
+          type="checkbox"
+          checked={!!user?.emailNotificationsEnabled}
+          disabled={prefBusy}
+          onChange={handleToggleEmailNotifications}
+        />
+        <span>
+          <span className="checkbox-title">Email me important notifications</span>
+        </span>
+      </label>
 
       {user?.role === 'player' && (
         <div className="danger-zone">

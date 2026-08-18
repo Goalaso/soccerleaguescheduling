@@ -1,12 +1,25 @@
 const pool = require('../db/pool');
 
 function toApiShape(row) {
-  return { id: row.id, name: row.name };
+  return {
+    id: row.id,
+    name: row.name,
+    openSeasonId: row.open_season_id,
+    openSeasonName: row.open_season_name,
+  };
 }
 
+// Public (see leagues.routes.js) — the open-season fields let the sign-up
+// form offer "also include me in {season}, forming now" without exposing
+// anything more sensitive than the league/season names already returned here.
 async function list(req, res, next) {
   try {
-    const { rows } = await pool.query('SELECT * FROM leagues ORDER BY id ASC');
+    const { rows } = await pool.query(
+      `SELECT l.*, s.id AS open_season_id, s.name AS open_season_name
+       FROM leagues l
+       LEFT JOIN seasons s ON s.league_id = l.id AND s.status = 'collecting_availability'
+       ORDER BY l.id ASC`
+    );
     res.json(rows.map(toApiShape));
   } catch (err) {
     next(err);

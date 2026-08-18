@@ -4,6 +4,7 @@ import RosterTable from './RosterTable';
 import SkillByPositionPanel from './SkillByPositionPanel';
 import PositionBreakdownPanel from './PositionBreakdownPanel';
 import { useSeasonAvailability } from '../../hooks/useSeasonAvailability';
+import { usePlayers } from '../../hooks/usePlayers';
 
 // Admin-only, permanent season-long roster changes — distinct from the
 // per-match loans on the schedule/record-results screens. Moving a player
@@ -13,11 +14,20 @@ function TeamRosterEditor({ team, allTeams, seasonId, addSeasonPlayer, removeSea
   const [expanded, setExpanded] = useState(false);
   const [busy, setBusy] = useState(false);
   const [addPick, setAddPick] = useState('');
-  const { players: availability } = useSeasonAvailability(seasonId);
+  const [newSeasonPick, setNewSeasonPick] = useState('');
+  const { players: availability, addToSeason } = useSeasonAvailability(seasonId);
+  const { players: allPlayers } = usePlayers();
 
   const otherTeams = allTeams.filter((t) => t.id !== team.id);
   const rosteredIds = new Set(allTeams.flatMap((t) => t.players.map((p) => p.id)));
   const subPool = availability.filter((p) => p.isAvailable && !rosteredIds.has(p.playerId));
+
+  // Players who don't have an availability row for this season at all yet —
+  // e.g. someone approved off the waitlist, or who just signed up, after
+  // this season was already created. Distinct from subPool above, which is
+  // for players who already have a row and are simply unrostered.
+  const availabilityIds = new Set(availability.map((p) => p.playerId));
+  const newSeasonPool = allPlayers.filter((p) => !availabilityIds.has(p.id) && !rosteredIds.has(p.id));
 
   const withBusy = async (fn) => {
     setBusy(true);
@@ -36,6 +46,10 @@ function TeamRosterEditor({ team, allTeams, seasonId, addSeasonPlayer, removeSea
   const handleAdd = () => {
     if (!addPick) return;
     withBusy(() => addSeasonPlayer(team.id, Number(addPick))).then(() => setAddPick(''));
+  };
+  const handleAddToSeason = () => {
+    if (!newSeasonPick) return;
+    withBusy(() => addToSeason(Number(newSeasonPick))).then(() => setNewSeasonPick(''));
   };
   const handleCaptain = (e) => {
     const val = e.target.value;
@@ -108,6 +122,30 @@ function TeamRosterEditor({ team, allTeams, seasonId, addSeasonPlayer, removeSea
             </select>
             <button type="button" className="outline-btn" disabled={busy || !addPick} onClick={handleAdd}>
               Add
+            </button>
+          </div>
+
+          <div className="option-group roster-manager-add-row">
+            <span className="option-label">Add to this season</span>
+            <select
+              className="select-input"
+              value={newSeasonPick}
+              onChange={(e) => setNewSeasonPick(e.target.value)}
+            >
+              <option value="">Player not yet part of this season...</option>
+              {newSeasonPool.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              className="outline-btn"
+              disabled={busy || !newSeasonPick}
+              onClick={handleAddToSeason}
+            >
+              Add to Season
             </button>
           </div>
         </>

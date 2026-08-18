@@ -61,6 +61,15 @@ export function AuthProvider({ children }) {
     return data.user;
   };
 
+  // Not a credential change, unlike updateAccount above — updates local
+  // state directly instead of round-tripping through /auth/me for a fresh
+  // user object.
+  const updatePreferences = async (payload) => {
+    const data = await apiPatch('/auth/me/preferences', payload);
+    setUser((prev) => ({ ...prev, emailNotificationsEnabled: data.emailNotificationsEnabled }));
+    return data;
+  };
+
   // Cookie is already cleared server-side by the deleteMe endpoint — no
   // separate logout call needed, just drop local state the same way logout does.
   const deleteAccount = async (currentPassword) => {
@@ -71,7 +80,17 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, loading, login, register, logout, updateAccount, deleteAccount, devLoginAsAdmin }}
+      value={{
+        user,
+        loading,
+        login,
+        register,
+        logout,
+        updateAccount,
+        updatePreferences,
+        deleteAccount,
+        devLoginAsAdmin,
+      }}
     >
       {children}
     </AuthContext.Provider>

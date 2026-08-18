@@ -4,6 +4,8 @@ import { Construct } from 'constructs';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs';
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
+import * as events from 'aws-cdk-lib/aws-events';
+import * as targets from 'aws-cdk-lib/aws-events-targets';
 import * as apigatewayv2 from 'aws-cdk-lib/aws-apigatewayv2';
 import { HttpLambdaIntegration } from 'aws-cdk-lib/aws-apigatewayv2-integrations';
 import * as s3 from 'aws-cdk-lib/aws-s3';
@@ -36,6 +38,16 @@ export class InfraStack extends cdk.Stack {
       'JwtSecret',
       'arn:aws:secretsmanager:us-east-1:913524936355:secret:bisl/jwt-secret-1KU4vz'
     );
+    // Client ID/secret + a refresh token for the Outlook/Graph waitlist
+    // mailbox. Unlike the two secrets above, this one is also *written to*
+    // at runtime — Microsoft rotates the refresh token on every use (see
+    // server/src/services/email.js), so the Lambda needs write access, not
+    // just read.
+    const outlookSecret = secretsmanager.Secret.fromSecretCompleteArn(
+      this,
+      'OutlookSecret',
+      'arn:aws:secretsmanager:us-east-1:913524936355:secret:bisl/outlook-email-oW7r3v'
+    );
 
     const apiFunction = new NodejsFunction(this, 'ApiFunction', {
       entry: path.join(__dirname, '../../server/src/lambda.js'),
@@ -46,6 +58,7 @@ export class InfraStack extends cdk.Stack {
       environment: {
         DATABASE_URL_SECRET_ARN: dbUrlSecret.secretArn,
         JWT_SECRET_ARN: jwtSecret.secretArn,
+        OUTLOOK_SECRET_ARN: outlookSecret.secretArn,
         NODE_ENV: 'production',
       },
       bundling: {
@@ -60,6 +73,17 @@ export class InfraStack extends cdk.Stack {
     });
     dbUrlSecret.grantRead(apiFunction);
     jwtSecret.grantRead(apiFunction);
+    outlookSecret.grantRead(apiFunction);
+    outlookSecret.grantWrite(apiFunction);
+
+    // Polls the waitlist mailbox on a schedule — lambda.js branches on the
+    // event shape EventBridge delivers (event.source === 'aws.events') to
+    // tell this apart from a normal API Gateway HTTP invocation, so no
+    // custom event payload needs to be configured here.
+    new events.Rule(this, 'WaitlistPollRule', {
+      schedule: events.Schedule.rate(cdk.Duration.minutes(15)),
+      targets: [new targets.LambdaFunction(apiFunction)],
+    });
 
     const httpApi = new apigatewayv2.HttpApi(this, 'HttpApi', {
       defaultIntegration: new HttpLambdaIntegration('LambdaIntegration', apiFunction),

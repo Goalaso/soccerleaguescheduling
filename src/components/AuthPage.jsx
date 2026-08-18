@@ -20,6 +20,7 @@ function AuthPage() {
   const [skill, setSkill] = useState('');
   const [age, setAge] = useState('');
   const [leagueIds, setLeagueIds] = useState([]);
+  const [joinSeasonLeagueIds, setJoinSeasonLeagueIds] = useState([]);
   const [error, setError] = useState(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -36,9 +37,21 @@ function AuthPage() {
     }
   };
 
-  const toggleLeague = (id) =>
-    setLeagueIds((prev) =>
-      prev.includes(id) ? prev.filter((l) => l !== id) : [...prev, id]
+  // Checking a league that currently has a season forming defaults its
+  // nested opt-in on too — visible and overridable, not a silent auto-add
+  // (see project plan) — and unchecking the league drops the opt-in with it.
+  const toggleLeague = (league) => {
+    const isSelected = leagueIds.includes(league.id);
+    setLeagueIds((prev) => (isSelected ? prev.filter((l) => l !== league.id) : [...prev, league.id]));
+    setJoinSeasonLeagueIds((prev) => {
+      if (isSelected) return prev.filter((l) => l !== league.id);
+      return league.openSeasonId ? [...prev, league.id] : prev;
+    });
+  };
+
+  const toggleJoinSeason = (leagueId) =>
+    setJoinSeasonLeagueIds((prev) =>
+      prev.includes(leagueId) ? prev.filter((l) => l !== leagueId) : [...prev, leagueId]
     );
 
   const handleSubmit = async (e) => {
@@ -63,6 +76,7 @@ function AuthPage() {
           skill: Number(skill),
           age: Number(age),
           leagueIds,
+          joinSeasonLeagueIds,
         });
       }
       navigate(from, { replace: true });
@@ -181,16 +195,32 @@ function AuthPage() {
                 <div className="option-group">
                   <span className="option-label">Leagues (select at least one)</span>
                   {leagues.map((league) => (
-                    <label className="checkbox-row" key={league.id}>
-                      <input
-                        type="checkbox"
-                        checked={leagueIds.includes(league.id)}
-                        onChange={() => toggleLeague(league.id)}
-                      />
-                      <span>
-                        <span className="checkbox-title">{league.name}</span>
-                      </span>
-                    </label>
+                    <React.Fragment key={league.id}>
+                      <label className="checkbox-row">
+                        <input
+                          type="checkbox"
+                          checked={leagueIds.includes(league.id)}
+                          onChange={() => toggleLeague(league)}
+                        />
+                        <span>
+                          <span className="checkbox-title">{league.name}</span>
+                        </span>
+                      </label>
+                      {leagueIds.includes(league.id) && league.openSeasonId && (
+                        <label className="checkbox-row join-season-row">
+                          <input
+                            type="checkbox"
+                            checked={joinSeasonLeagueIds.includes(league.id)}
+                            onChange={() => toggleJoinSeason(league.id)}
+                          />
+                          <span>
+                            <span className="checkbox-title">
+                              Also include me in "{league.openSeasonName}", forming now
+                            </span>
+                          </span>
+                        </label>
+                      )}
+                    </React.Fragment>
                   ))}
                 </div>
               </>

@@ -8,11 +8,17 @@ import FeatureItem from './FeatureItem';
 import PageBanner from './PageBanner';
 import NotificationsPanel from './NotificationsPanel';
 import { useNotifications } from '../hooks/useNotifications';
+import { useWaitlist } from '../hooks/useWaitlist';
+import { useAuth } from '../context/AuthContext';
 
 function HomePage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
   const { notifications } = useNotifications();
   const hasNotifications = notifications.length > 0;
+  const { entries: waitlistEntries } = useWaitlist({ enabled: isAdmin });
+  const waitlistCount = waitlistEntries.length;
 
   return (
     <>
@@ -25,6 +31,14 @@ function HomePage() {
 
       <div className="generator-content">
         <NotificationsPanel />
+        {isAdmin && waitlistCount > 0 && (
+          <button className="waitlist-alert-banner" onClick={() => navigate('/players/waitlist')}>
+            <span>
+              ({waitlistCount}) player{waitlistCount === 1 ? '' : 's'} on the waitlist
+            </span>
+            <span className="waitlist-alert-go">Go &gt;</span>
+          </button>
+        )}
       </div>
 
       <section className="hero-card">
@@ -55,26 +69,28 @@ function HomePage() {
           </div>
         </div>
 
-        <div className="feature-row">
-          <FeatureItem
-            icon={<PlayerIcon />}
-            title="Manage Players"
-            description="Add or edit players, skill ratings, and position preferences."
-            onClick={() => navigate('/players')}
-          />
-          <FeatureItem
-            icon={<TrophyIcon />}
-            title="Record Game Results"
-            description="Enter final scores and player goal counts for completed games."
-            onClick={() => navigate('/schedule')}
-          />
-          <FeatureItem
-            icon={<ChartIcon />}
-            title="View Standings"
-            description="See updated league standings and team performance"
-            onClick={() => navigate('/league/standings')}
-          />
-        </div>
+        {isAdmin && (
+          <div className="feature-row">
+            <FeatureItem
+              icon={<PlayerIcon />}
+              title="Manage Players"
+              description="Add or edit players, skill ratings, and position preferences."
+              onClick={() => navigate('/players')}
+            />
+            <FeatureItem
+              icon={<TrophyIcon />}
+              title="Record Game Results"
+              description="Enter final scores and player goal counts for completed games."
+              onClick={() => navigate('/schedule')}
+            />
+            <FeatureItem
+              icon={<ChartIcon />}
+              title="View Standings"
+              description="See updated league standings and team performance"
+              onClick={() => navigate('/league/standings')}
+            />
+          </div>
+        )}
       </section>
     </>
   );

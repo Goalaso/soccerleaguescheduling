@@ -15,6 +15,10 @@ async function apiFetch(path, options = {}) {
   if (!res.ok) {
     const error = new Error(data?.error || `Request failed (${res.status})`);
     error.status = res.status;
+    // Some endpoints attach extra structured fields beyond the message
+    // (e.g. existingPlayerId on a 409) — keep those available to callers
+    // that want to act on them, not just display the text.
+    error.data = data;
     throw error;
   }
 
