@@ -1,5 +1,6 @@
 const pool = require('../db/pool');
 const { toApiShape: playerToApiShape } = require('./players.controller');
+const { sendEmail, EMAIL_NOTIFIED_TYPES } = require('../services/email');
 
 function summarizeTeam(team) {
   const totalSkill = team.players.reduce((sum, p) => sum + p.skill, 0);
@@ -192,17 +193,29 @@ async function notifyRosterChange(db, playerId, team, action) {
     removed: `You've been removed from ${team.name}`,
     moved: `You've been moved to ${team.name}`,
   };
+  const message = messages[action];
   await db.query(
     `INSERT INTO notifications (user_id, type, message, action_url, data)
      SELECT p.user_id, 'team_roster_changed', $2, $3, $4
      FROM players p WHERE p.id = $1 AND p.user_id IS NOT NULL`,
-    [
-      playerId,
-      messages[action],
-      `/league/team/${team.id}`,
-      JSON.stringify({ teamId: team.id, teamName: team.name, action }),
-    ]
+    [playerId, message, `/league/team/${team.id}`, JSON.stringify({ teamId: team.id, teamName: team.name, action })]
   );
+
+  if (!EMAIL_NOTIFIED_TYPES.includes('team_roster_changed')) return;
+  const { rows: emailRows } = await db.query(
+    `SELECT COALESCE(u.email, p.email) AS email FROM players p LEFT JOIN users u ON u.id = p.user_id
+     WHERE p.id = $1 AND (u.id IS NULL OR u.email_notifications_enabled = true)`,
+    [playerId]
+  );
+  const email = emailRows[0]?.email;
+  if (!email) return;
+  // Best-effort — a slow/failed Outlook call must never fail the roster
+  // change itself, which has already succeeded by this point.
+  try {
+    await sendEmail({ to: email, subject: message, body: message });
+  } catch (err) {
+    console.error('Failed to send team roster change email', err);
+  }
 }
 
 async function addSeasonPlayer(req, res, next) {

@@ -1,6 +1,108 @@
 const pool = require('../db/pool');
 const { toApiShape: playerToApiShape } = require('./players.controller');
 const { buildRoundRobinFixtures } = require('../utils/schedule');
+const { sendEmail, EMAIL_NOTIFIED_TYPES } = require('../services/email');
+
+// match_date comes back as a raw 'YYYY-MM-DD' string (see server/src/db/pool.js's
+// DATE type-parser override) — building the Date from Y/M/D components
+// directly avoids the UTC-parse day-shift a bare `new Date(str)` risks.
+function formatMatchDateLabel(matchDateStr) {
+  const [year, month, day] = matchDateStr.split('-').map(Number);
+  return new Date(year, month - 1, day).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+async function resolvePlayerEmail(db, playerId) {
+  const { rows } = await db.query(
+    `SELECT COALESCE(u.email, p.email) AS email FROM players p LEFT JOIN users u ON u.id = p.user_id
+     WHERE p.id = $1 AND (u.id IS NULL OR u.email_notifications_enabled = true)`,
+    [playerId]
+  );
+  return rows[0]?.email || null;
+}
+
+// Fires when a player is added as a sub or borrowed player — never for
+// 'regular', which is just the normal attendance toggle, not a new
+// assignment. related_match_id is deliberately left unset: same reasoning
+// as team_roster_changed in teams.controller.js — a player can legitimately
+// be (re)assigned to the same match more than once, and the dedup index on
+// (user_id, type, related_match_id) would collapse those into one row.
+async function notifyMatchAssignment(db, { playerId, teamId, match }) {
+  const { rows: teamRows } = await db.query('SELECT name FROM teams WHERE id = $1', [teamId]);
+  const teamName = teamRows[0]?.name;
+  const isHome = teamId === match.home_team_id;
+  const message = `You're now playing for ${teamName} (${isHome ? 'Home' : 'Away'}) — Week ${match.week}, ${formatMatchDateLabel(match.match_date)}.`;
+
+  await db.query(
+    `INSERT INTO notifications (user_id, type, message, action_url, data)
+     SELECT p.user_id, 'match_roster_assigned', $2, $3, $4
+     FROM players p WHERE p.id = $1 AND p.user_id IS NOT NULL`,
+    [playerId, message, `/schedule/match/${match.id}`, JSON.stringify({ matchId: match.id, teamId, teamName, isHome, week: match.week })]
+  );
+
+  const email = await resolvePlayerEmail(db, playerId);
+  if (email && EMAIL_NOTIFIED_TYPES.includes('match_roster_assigned')) {
+    try {
+      await sendEmail({ to: email, subject: `You're playing for ${teamName} this week!`, body: message });
+    } catch (err) {
+      console.error('Failed to send match assignment email', err);
+    }
+  }
+}
+
+// Fires when a sub/borrowed player is removed. `stillNeededTeamId` +
+// `stillNeededMatchId` cover the "loaned, but still needed for their own
+// team's match" case (same match, or a different one this round) —
+// left undefined for a plain sub (nothing to fall back to) or a borrowed
+// player whose own team has a bye this round (nothing to restore them to).
+async function notifyMatchRemoval(db, { playerId, removedFromTeamId, match, stillNeededTeamId, stillNeededMatchId }) {
+  const teamIds = [removedFromTeamId, stillNeededTeamId].filter(Boolean);
+  const { rows: teamRows } = await db.query('SELECT id, name FROM teams WHERE id = ANY($1::int[])', [teamIds]);
+  const teamNameById = Object.fromEntries(teamRows.map((r) => [r.id, r.name]));
+  const removedFromTeamName = teamNameById[removedFromTeamId];
+
+  let stillNeededMatch = null;
+  if (stillNeededTeamId) {
+    const targetMatch = stillNeededMatchId
+      ? (await db.query('SELECT id, week, match_date, home_team_id FROM matches WHERE id = $1', [stillNeededMatchId])).rows[0]
+      : match;
+    stillNeededMatch = {
+      id: targetMatch.id,
+      week: targetMatch.week,
+      dateLabel: formatMatchDateLabel(targetMatch.match_date),
+      isHome: stillNeededTeamId === targetMatch.home_team_id,
+    };
+  }
+
+  const message = stillNeededMatch
+    ? `You're no longer playing for ${removedFromTeamName} — you're still needed for ${teamNameById[stillNeededTeamId]} (${stillNeededMatch.isHome ? 'Home' : 'Away'}) — Week ${stillNeededMatch.week}, ${stillNeededMatch.dateLabel}.`
+    : `You're no longer needed for ${removedFromTeamName}'s Week ${match.week} match on ${formatMatchDateLabel(match.match_date)}.`;
+  const actionUrl = `/schedule/match/${stillNeededMatch ? stillNeededMatch.id : match.id}`;
+
+  await db.query(
+    `INSERT INTO notifications (user_id, type, message, action_url, data)
+     SELECT p.user_id, 'match_roster_removed', $2, $3, $4
+     FROM players p WHERE p.id = $1 AND p.user_id IS NOT NULL`,
+    [
+      playerId,
+      message,
+      actionUrl,
+      JSON.stringify({ matchId: match.id, removedFromTeamId, removedFromTeamName, stillNeededTeamId: stillNeededTeamId || null }),
+    ]
+  );
+
+  const email = await resolvePlayerEmail(db, playerId);
+  if (email && EMAIL_NOTIFIED_TYPES.includes('match_roster_removed')) {
+    try {
+      await sendEmail({
+        to: email,
+        subject: stillNeededMatch ? `Still on for ${teamNameById[stillNeededTeamId]} this week` : 'Update to your match assignment',
+        body: message,
+      });
+    } catch (err) {
+      console.error('Failed to send match removal email', err);
+    }
+  }
+}
 
 async function fetchMatchesForSeason(db, seasonId) {
   const { rows: matchRows } = await db.query(
@@ -302,24 +404,49 @@ async function fetchMatchWithRosters(db, matchId) {
   const match = await fetchMatchById(db, matchId);
   if (!match) return null;
 
-  const [homeRoster, awayRoster, submissionRows] = await Promise.all([
+  const { rows: seasonRows } = await db.query('SELECT season_id, week FROM matches WHERE id = $1', [matchId]);
+  const { season_id: seasonId, week } = seasonRows[0];
+
+  const [homeRoster, awayRoster, submissionRows, loanedOutRows] = await Promise.all([
     fetchEffectiveRoster(db, matchId, match.home.id),
     fetchEffectiveRoster(db, matchId, match.away.id),
     db.query(
       'SELECT team_id, home_goals, away_goals, scorers, submitted_at FROM match_score_submissions WHERE match_id = $1',
       [matchId]
     ),
+    // Any of this match's two teams' season-roster players currently
+    // rostered under a DIFFERENT team this same round — whether that's the
+    // opponent right here (visible via home/away.players too, but flagged
+    // here as well for a uniform lookup) or a totally different match
+    // elsewhere this round (not otherwise visible from this match's data
+    // at all, since that's a separate match_rosters row entirely).
+    db.query(
+      `SELECT tp.team_id AS home_team_id, mr.player_id, t2.name AS actual_team_name
+       FROM team_players tp
+       JOIN match_rosters mr ON mr.player_id = tp.player_id
+       JOIN matches m2 ON m2.id = mr.match_id
+       JOIN teams t2 ON t2.id = mr.team_id
+       WHERE tp.team_id = ANY($1::int[]) AND m2.season_id = $2 AND m2.week = $3 AND mr.team_id != tp.team_id`,
+      [[match.home.id, match.away.id], seasonId, week]
+    ),
   ]);
+
+  const loanedOutByTeam = { [match.home.id]: {}, [match.away.id]: {} };
+  loanedOutRows.rows.forEach((r) => {
+    loanedOutByTeam[r.home_team_id][r.player_id] = r.actual_team_name;
+  });
 
   return {
     ...match,
     home: {
       ...match.home,
       players: homeRoster.map((row) => ({ ...playerToApiShape(row), source: row.source })),
+      loanedOut: loanedOutByTeam[match.home.id],
     },
     away: {
       ...match.away,
       players: awayRoster.map((row) => ({ ...playerToApiShape(row), source: row.source })),
+      loanedOut: loanedOutByTeam[match.away.id],
     },
     scoreSubmissions: submissionRows.rows.map((r) => ({
       teamId: r.team_id,
@@ -553,6 +680,16 @@ async function addRosterEntry(req, res, next) {
       }
     }
 
+    if (source === 'sub' || source === 'borrowed') {
+      // Best-effort — a slow/failed Outlook call must never fail the roster
+      // change itself, which has already succeeded by this point.
+      try {
+        await notifyMatchAssignment(pool, { playerId, teamId, match });
+      } catch (err) {
+        console.error('Failed to send match assignment notification', err);
+      }
+    }
+
     const updated = await fetchMatchWithRosters(pool, req.params.id);
     res.json(updated);
   } catch (err) {
@@ -610,6 +747,16 @@ async function removeRosterEntry(req, res, next) {
           `UPDATE match_rosters SET team_id = $1, source = 'regular', added_by = $2 WHERE match_id = $3 AND player_id = $4`,
           [homeTeamId, req.user.sub, req.params.id, req.params.playerId]
         );
+        try {
+          await notifyMatchRemoval(pool, {
+            playerId: Number(req.params.playerId),
+            removedFromTeamId: teamId,
+            match,
+            stillNeededTeamId: homeTeamId,
+          });
+        } catch (err) {
+          console.error('Failed to send match removal notification', err);
+        }
         const updated = await fetchMatchWithRosters(pool, req.params.id);
         return res.json(updated);
       }
@@ -619,9 +766,10 @@ async function removeRosterEntry(req, res, next) {
         req.params.playerId,
       ]);
 
+      let ownMatchId = null;
       if (homeTeamId) {
         // On loan from a third team — restore them to that team's own match this round, if it has one.
-        const ownMatchId = await findTeamMatchInRound(pool, match.season_id, match.week, homeTeamId, req.params.id);
+        ownMatchId = await findTeamMatchInRound(pool, match.season_id, match.week, homeTeamId, req.params.id);
         if (ownMatchId) {
           await materializeRosterIfEmpty(pool, ownMatchId, homeTeamId);
           await pool.query(
@@ -633,8 +781,32 @@ async function removeRosterEntry(req, res, next) {
         }
       }
 
+      try {
+        await notifyMatchRemoval(pool, {
+          playerId: Number(req.params.playerId),
+          removedFromTeamId: teamId,
+          match,
+          stillNeededTeamId: ownMatchId ? homeTeamId : undefined,
+          stillNeededMatchId: ownMatchId || undefined,
+        });
+      } catch (err) {
+        console.error('Failed to send match removal notification', err);
+      }
+
       const updated = await fetchMatchWithRosters(pool, req.params.id);
       return res.json(updated);
+    }
+
+    if (existing.source === 'sub') {
+      try {
+        await notifyMatchRemoval(pool, {
+          playerId: Number(req.params.playerId),
+          removedFromTeamId: teamId,
+          match,
+        });
+      } catch (err) {
+        console.error('Failed to send match removal notification', err);
+      }
     }
 
     await pool.query('DELETE FROM match_rosters WHERE match_id = $1 AND player_id = $2', [

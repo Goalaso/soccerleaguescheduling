@@ -1,6 +1,7 @@
 import React from 'react';
 import TeamSummaryCard from './TeamSummaryCard';
 import MatchHistoryList from './MatchHistoryList';
+import UpcomingGameCard from './UpcomingGameCard';
 import TeamPlayersPanel from './TeamPlayersPanel';
 
 function TeamHistoryView({
@@ -10,6 +11,7 @@ function TeamHistoryView({
   recentForm,
   topScorer,
   matches,
+  nextMatch,
   teamGoals,
   gamesPlayedByPlayer,
   onBack,
@@ -42,7 +44,10 @@ function TeamHistoryView({
           topScorer={topScorer}
           variant="history"
         />
-        <MatchHistoryList team={team} matches={matches} onSelectMatch={onSelectMatch} />
+        <div className="team-history-matches-col">
+          <MatchHistoryList team={team} matches={matches} onSelectMatch={onSelectMatch} />
+          <UpcomingGameCard team={team} match={nextMatch} onSelectMatch={onSelectMatch} />
+        </div>
         <TeamPlayersPanel players={team.players} teamGoals={teamGoals} gamesPlayedByPlayer={gamesPlayedByPlayer} />
       </div>
     </div>

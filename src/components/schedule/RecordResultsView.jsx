@@ -173,6 +173,12 @@ function RosterManager({ match, teams, seasonId, matches, addToRoster, removeFro
       ...borrowable.map((p) => ({ id: p.id, name: p.name, source: 'borrowed', teamName: p.teamName, count: p.count })),
     ];
 
+    // Season-roster players currently loaned to another team this round
+    // (this match's opponent, or a completely different match) — checking
+    // them in here would either 409 or, worse, create a duplicate roster
+    // entry across two matches at once, so disable and label instead.
+    const loanedOut = team.loanedOut || {};
+
     return (
       <div>
         <span className="option-label">{team.name}</span>
@@ -181,10 +187,20 @@ function RosterManager({ match, teams, seasonId, matches, addToRoster, removeFro
             <input
               type="checkbox"
               checked={confirmedIds.has(p.id)}
-              disabled={busy}
+              disabled={busy || !!loanedOut[p.id]}
               onChange={() => handleToggleRegular(team.id, p.id, confirmedIds.has(p.id))}
             />
-            <span>{p.name}</span>
+            <span>
+              {p.name}
+              {loanedOut[p.id] && (
+                <span
+                  className="roster-source-badge gameday-loaned-badge"
+                  title={`LOANED TO ${loanedOut[p.id].toUpperCase()}`}
+                >
+                  LOANED TO {loanedOut[p.id].toUpperCase()}
+                </span>
+              )}
+            </span>
           </label>
         ))}
         {guests.map((p) => (

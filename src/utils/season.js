@@ -127,6 +127,23 @@ export function getTeamMatches(season, teamId) {
     .sort((a, b) => b.week - a.week);
 }
 
+// Soonest not-yet-played match for this specific team, strictly on or after
+// today — distinct from season.nextMatch, which is the next match for the
+// *league* as a whole (any team, whichever needs a score/is scheduled
+// soonest overall). !played alone isn't "upcoming": a match whose date has
+// already passed with no score entered is overdue, not upcoming, and would
+// otherwise wrongly win here for being the earliest unplayed date (e.g. an
+// admin who's behind on entering a past result would make every future
+// match for that team look further out than it should).
+export function getNextTeamMatch(season, teamId) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const upcoming = season.matches
+    .filter((m) => !m.played && m.date >= today && (m.homeId === teamId || m.awayId === teamId))
+    .sort((a, b) => a.date - b.date);
+  return upcoming[0] || null;
+}
+
 export function matchResultLetter(match, teamId) {
   const isHome = match.homeId === teamId;
   const forGoals = isHome ? match.result.homeGoals : match.result.awayGoals;

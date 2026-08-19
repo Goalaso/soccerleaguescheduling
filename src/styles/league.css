@@ -296,6 +296,32 @@
   margin-top: 0.3rem;
 }
 
+/* Stacks Match History + Upcoming Game within the same team-history-grid
+   column, same flex-column-of-panels pattern as .notify-sidebar. */
+.team-history-matches-col {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.upcoming-game-row {
+  display: grid;
+  align-items: center;
+  grid-template-columns: 0.7fr 2fr 0.7fr 0.3fr;
+  gap: 0.6rem;
+  padding: 0.75rem 0.25rem;
+  font-size: 0.88rem;
+}
+
+.upcoming-game-row-clickable {
+  cursor: pointer;
+}
+
+.upcoming-game-row-clickable:hover {
+  background: var(--bg-panel-alt);
+  border-radius: 6px;
+}
+
 /* Match history */
 .match-history-list {
   display: flex;

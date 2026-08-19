@@ -22,19 +22,29 @@ function fullDate(date) {
 // Every regular roster member always gets a row (so a captain can see and
 // toggle the whole team, not just whoever's already confirmed), plus any
 // sub/borrowed player an admin has already added to this specific match.
-function buildRosterRows(fullRoster, matchPlayers) {
+//
+// A season-roster player who isn't in this team's own match roster because
+// they've been loaned out — whether to the opponent right here, or to a
+// completely different match elsewhere this same round — isn't just
+// "unconfirmed," they're not eligible to be checked in here at all. `team`
+// carries a server-computed `loanedOut` map (playerId -> their current
+// team's name) covering both cases, since the "different match entirely"
+// case has no other trace in this match's own data at all.
+function buildRosterRows(fullRoster, matchPlayers, team) {
   const confirmedIds = new Set(matchPlayers.map((p) => p.id));
   const fullIds = new Set((fullRoster || []).map((p) => p.id));
+  const loanedOut = team.loanedOut || {};
 
   const regularRows = (fullRoster || []).map((p) => ({
     ...p,
     source: 'regular',
     confirmed: confirmedIds.has(p.id),
+    loanedToTeamName: loanedOut[p.id] || null,
   }));
 
   const guestRows = matchPlayers
     .filter((p) => p.source !== 'regular' && !fullIds.has(p.id))
-    .map((p) => ({ ...p, confirmed: true }));
+    .map((p) => ({ ...p, confirmed: true, loanedToTeamName: null }));
 
   return [...regularRows, ...guestRows];
 }
@@ -48,7 +58,7 @@ function RosterColumn({ team, fullRoster, isMyTeam, scorers, mode, onToggle, tog
     .filter((s) => s.teamId === team.id)
     .reduce((acc, s) => ({ ...acc, [s.playerId]: s.goals }), {});
 
-  const rows = buildRosterRows(fullRoster, team.players);
+  const rows = buildRosterRows(fullRoster, team.players, team);
   const confirmedCount = rows.filter((r) => r.confirmed).length;
 
   return (
@@ -74,11 +84,21 @@ function RosterColumn({ team, fullRoster, isMyTeam, scorers, mode, onToggle, tog
                 type="checkbox"
                 className="attendance-checkbox"
                 checked={p.confirmed}
-                disabled={toggling}
+                disabled={toggling || !!p.loanedToTeamName}
                 onChange={() => onToggle(p.id, p.confirmed)}
                 aria-label={`${p.name} attending`}
               />
-              <span className="record-player-name">{p.name}</span>
+              <span className="record-player-name">
+                {p.name}
+                {p.loanedToTeamName && (
+                  <span
+                    className="roster-source-badge gameday-loaned-badge"
+                    title={`LOANED TO ${p.loanedToTeamName.toUpperCase()}`}
+                  >
+                    LOANED TO {p.loanedToTeamName.toUpperCase()}
+                  </span>
+                )}
+              </span>
               <span className="record-player-position">{POSITION_ABBR[p.position]}</span>
               <button
                 type="button"
@@ -102,6 +122,11 @@ function RosterColumn({ team, fullRoster, isMyTeam, scorers, mode, onToggle, tog
         }
 
         const goals = recordedGoals[p.id];
+        const badgeText = p.loanedToTeamName
+          ? `LOANED TO ${p.loanedToTeamName.toUpperCase()}`
+          : p.source !== 'regular'
+            ? p.source.toUpperCase()
+            : '';
         return (
           <div
             className={`record-player-row record-player-row-readonly ${goals ? 'record-player-row-active' : ''} ${
@@ -114,7 +139,7 @@ function RosterColumn({ team, fullRoster, isMyTeam, scorers, mode, onToggle, tog
                 type="checkbox"
                 className="attendance-checkbox"
                 checked={p.confirmed}
-                disabled={toggling}
+                disabled={toggling || !!p.loanedToTeamName}
                 onChange={() => onToggle(p.id, p.confirmed)}
                 aria-label={`${p.name} attending`}
               />
@@ -123,7 +148,9 @@ function RosterColumn({ team, fullRoster, isMyTeam, scorers, mode, onToggle, tog
             )}
             <span className="record-player-name">{p.name}</span>
             <span className="record-player-position">{POSITION_ABBR[p.position]}</span>
-            <span className="roster-source-badge">{p.source !== 'regular' ? p.source.toUpperCase() : ''}</span>
+            <span className="roster-source-badge" title={badgeText || undefined}>
+              {badgeText}
+            </span>
             <span className="gameday-goals">{goals ? `${goals} ⚽` : ''}</span>
           </div>
         );

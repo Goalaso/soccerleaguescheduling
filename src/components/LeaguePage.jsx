@@ -6,13 +6,14 @@ import LeagueEmptyState from './league/LeagueEmptyState';
 import StandingsView from './league/StandingsView';
 import TeamHistoryView from './league/TeamHistoryView';
 import TeamProfileView from './league/TeamProfileView';
+import TeamRosterEditPage from './league/TeamRosterEditPage';
 import PlayerStatsView from './league/PlayerStatsView';
 import { usePublishedTeams } from '../hooks/usePublishedTeams';
 import { useMatches } from '../hooks/useMatches';
 import { useTeamStats } from '../hooks/useTeamStats';
 import { useSelectedSeason } from '../context/SelectedSeasonContext';
 import { useAuth } from '../context/AuthContext';
-import { buildSeasonFromMatches, getTeamMatches, matchResultLetter } from '../utils/season';
+import { buildSeasonFromMatches, getTeamMatches, getNextTeamMatch, matchResultLetter } from '../utils/season';
 
 // goalsForTeam only counts goals scored *while playing for this team* — a
 // player borrowed elsewhere for a match doesn't inflate their home team's
@@ -36,10 +37,11 @@ function useSelectedTeam(season) {
 
   const rank = season.standings.findIndex((s) => s.team.id === id) + 1;
   const matches = getTeamMatches(season, id);
+  const nextMatch = getNextTeamMatch(season, id);
   const recentForm = matches.slice(0, 5).map((m) => matchResultLetter(m, id));
   const topScorer = getTeamTopScorer(standing.team, season.teamPlayerGoals[id] || {});
 
-  return { id, standing, rank, matches, recentForm, topScorer };
+  return { id, standing, rank, matches, nextMatch, recentForm, topScorer };
 }
 
 function TeamHistoryRoute({ season, gamesPlayedByPlayer }) {
@@ -55,6 +57,7 @@ function TeamHistoryRoute({ season, gamesPlayedByPlayer }) {
       recentForm={selected.recentForm}
       topScorer={selected.topScorer}
       matches={selected.matches}
+      nextMatch={selected.nextMatch}
       teamGoals={season.teamPlayerGoals[selected.id] || {}}
       gamesPlayedByPlayer={gamesPlayedByPlayer}
       onBack={() => navigate('/league/standings')}
@@ -64,7 +67,7 @@ function TeamHistoryRoute({ season, gamesPlayedByPlayer }) {
   );
 }
 
-function TeamProfileRoute({ season, seasonId, roster }) {
+function TeamProfileRoute({ season }) {
   const navigate = useNavigate();
   const { user } = useAuth();
   const selected = useSelectedTeam(season);
@@ -79,10 +82,28 @@ function TeamProfileRoute({ season, seasonId, roster }) {
       topScorer={selected.topScorer}
       playerGoals={season.teamPlayerGoals[selected.id] || {}}
       onBack={() => navigate(`/league/team/${selected.id}`)}
-      onGoToSchedule={() => navigate('/schedule')}
+      onGoToEditRoster={() => navigate(`/league/team/${selected.id}/edit`)}
       isAdmin={user?.role === 'admin'}
+    />
+  );
+}
+
+function TeamRosterEditRoute({ season, seasonId, roster }) {
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const selected = useSelectedTeam(season);
+  if (!selected) return <Navigate to="/league/standings" replace />;
+  // Direct-URL guard, same reasoning as every other admin-only action in
+  // this app — the button that leads here already only shows for admins,
+  // this just closes the gap for someone hitting the URL directly.
+  if (user?.role !== 'admin') return <Navigate to={`/league/team/${selected.id}/profile`} replace />;
+
+  return (
+    <TeamRosterEditPage
+      team={selected.standing.team}
       allTeams={season.standings.map((s) => s.team)}
       seasonId={seasonId}
+      onBack={() => navigate(`/league/team/${selected.id}/profile`)}
       {...roster}
     />
   );
@@ -171,10 +192,11 @@ function LeaguePage() {
             path="team/:teamId"
             element={<TeamHistoryRoute season={season} gamesPlayedByPlayer={gamesPlayedByPlayer} />}
           />
+          <Route path="team/:teamId/profile" element={<TeamProfileRoute season={season} />} />
           <Route
-            path="team/:teamId/profile"
+            path="team/:teamId/edit"
             element={
-              <TeamProfileRoute
+              <TeamRosterEditRoute
                 season={season}
                 seasonId={selectedSeasonId}
                 roster={{ addSeasonPlayer, removeSeasonPlayer, moveSeasonPlayer, setCaptain }}

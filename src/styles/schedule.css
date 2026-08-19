@@ -331,7 +331,10 @@
 }
 
 .record-player-row {
-  grid-template-columns: 1.5rem 1fr 2.5rem auto 1.5rem auto;
+  /* Same reasoning as record-player-row-readonly below: name capped
+     instead of 1fr so position/steppers sit close to the name instead of
+     stranded at the far edge of an oversized column. */
+  grid-template-columns: 1.5rem minmax(4rem, 9rem) 2.5rem auto 1.5rem auto;
   gap: 0.6rem;
   padding: 0.5rem 0;
   border-bottom: 1px solid var(--row-divider);
@@ -339,7 +342,22 @@
 }
 
 .record-player-row-readonly {
-  grid-template-columns: 1.2rem 1fr 2.5rem 3.5rem auto;
+  /* Three deliberately-aligned zones rather than everything left-packed:
+     name hugs the left, position sits centered in its own wider slot
+     instead of glued to the name, and the status tag hugs the right edge
+     instead of getting stranded in a narrow fixed column. Name and badge
+     share the row's flexible remaining width (1fr each) so both scale
+     with the panel instead of one starving the other. */
+  grid-template-columns: 1.2rem minmax(5rem, 1fr) minmax(3rem, 6rem) minmax(6rem, 1fr) auto;
+}
+
+.record-player-row-readonly .record-player-position {
+  justify-self: center;
+}
+
+.record-player-row-readonly .roster-source-badge {
+  justify-self: end;
+  text-align: right;
 }
 
 .record-player-row-unconfirmed {
@@ -370,6 +388,10 @@
   font-weight: 700;
   color: var(--warning-text);
   letter-spacing: 0.03em;
+}
+
+.gameday-loaned-badge {
+  margin-left: 0.4em;
 }
 
 .gameday-goals {

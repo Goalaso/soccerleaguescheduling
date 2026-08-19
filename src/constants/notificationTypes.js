@@ -9,6 +9,10 @@ export const NOTIFICATION_TYPES = {
   // the FCFS capacity check resolves — also purely informational.
   SEASON_CONFIRMED: 'season_confirmed',
   SEASON_WAITLISTED: 'season_waitlisted',
+  // A single-match sub/borrow assignment or its removal — also purely
+  // informational, distinct from TEAM_ROSTER_CHANGED (season-long).
+  MATCH_ROSTER_ASSIGNED: 'match_roster_assigned',
+  MATCH_ROSTER_REMOVED: 'match_roster_removed',
 };
 
 // Types here resolve only through their own action (responding to an
