@@ -11,6 +11,18 @@ function formatMatchDateLabel(matchDateStr) {
   return new Date(year, month - 1, day).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
+// Same Y/M/D-component construction as formatMatchDateLabel above, just
+// returning a Date instead of a formatted label — a bare `new Date(str)`
+// parses the date-only string as UTC midnight, which then reads back as
+// the *previous* calendar day everywhere the server's local timezone is
+// behind UTC. buildRoundRobinFixtures does date math (.setDate()) against
+// whatever Date it's given, so that shift would silently move every
+// generated match a day earlier than the season's actual starts_on.
+function parseDateOnly(dateStr) {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  return new Date(year, month - 1, day);
+}
+
 async function resolvePlayerEmail(db, playerId) {
   const { rows } = await db.query(
     `SELECT COALESCE(u.email, p.email) AS email FROM players p LEFT JOIN users u ON u.id = p.user_id
@@ -144,10 +156,11 @@ async function fetchMatchesForSeason(db, seasonId) {
     return acc;
   }, {});
 
-  // "Confirmed today" per team per match — same fallback semantics as
-  // fetchEffectiveRoster (real match_rosters rows if the roster's been
-  // touched, else the team's season roster size), just as a count instead
-  // of full rows, so this stays two bulk queries instead of one per match.
+  // "Confirmed today" per team per match — real match_rosters rows only.
+  // No fallback to the team's season roster size: nobody's confirmed until
+  // someone actually checks in, same reasoning as fetchEffectiveRoster's
+  // confirmed flag — an untouched match correctly shows 0 here, not the
+  // team's full roster size.
   const rosterCountRows = matchIds.length
     ? (
         await db.query(
@@ -161,19 +174,7 @@ async function fetchMatchesForSeason(db, seasonId) {
     rosterCountRows.map((r) => [`${r.match_id}:${r.team_id}`, r.cnt])
   );
 
-  const teamIds = [...new Set(matchRows.flatMap((m) => [m.home_team_id, m.away_team_id]))];
-  const teamPlayerCountRows = teamIds.length
-    ? (
-        await db.query(
-          `SELECT team_id, COUNT(*)::int AS cnt FROM team_players WHERE team_id = ANY($1::int[]) GROUP BY team_id`,
-          [teamIds]
-        )
-      ).rows
-    : [];
-  const teamPlayerCountByTeam = Object.fromEntries(teamPlayerCountRows.map((r) => [r.team_id, r.cnt]));
-
-  const confirmedCountFor = (matchId, teamId) =>
-    rosterCountByMatchTeam[`${matchId}:${teamId}`] ?? teamPlayerCountByTeam[teamId] ?? 0;
+  const confirmedCountFor = (matchId, teamId) => rosterCountByMatchTeam[`${matchId}:${teamId}`] ?? 0;
 
   return matchRows.map((m) => ({
     id: m.id,
@@ -292,9 +293,13 @@ async function list(req, res, next) {
       const teamIds = teamRows.map((t) => t.id);
 
       if (teamIds.length >= 2) {
+        // roundRobinRounds (inside buildRoundRobinFixtures) always produces
+        // exactly teamIds.length - 1 rounds for one full cycle — multiplying
+        // by num_round_robins is how many times each team plays every other.
+        const numWeeks = (season.num_round_robins || 1) * (teamIds.length - 1);
         const fixtures = season.starts_on
-          ? buildRoundRobinFixtures(teamIds, 12, new Date(season.starts_on))
-          : buildRoundRobinFixtures(teamIds);
+          ? buildRoundRobinFixtures(teamIds, numWeeks, parseDateOnly(season.starts_on))
+          : buildRoundRobinFixtures(teamIds, numWeeks);
         for (const f of fixtures) {
           await client.query(
             `INSERT INTO matches (season_id, week, match_date, home_team_id, away_team_id, status)
@@ -335,6 +340,13 @@ async function list(req, res, next) {
 // falls back to the season-long team_players roster, so the feature is
 // opt-in — a match nobody did a roll call for still works exactly like it
 // did before match_rosters existed.
+// `confirmed` distinguishes a real roll-call/roster row from the fallback
+// list below — the fallback exists so the team still shows up (e.g. for
+// logging a goal) before anyone's touched this match's roster at all, but
+// nobody has actually said they're attending yet, so it must never read as
+// "everyone confirmed." Only the fallback rows get confirmed: false; real
+// match_rosters rows (regular, sub, or borrowed) are always confirmed: true
+// by definition — they only exist because someone was actively checked in.
 async function fetchEffectiveRoster(db, matchId, teamId) {
   const { rows } = await db.query(
     `SELECT mr.player_id, mr.source, mr.goals, p.*
@@ -344,7 +356,7 @@ async function fetchEffectiveRoster(db, matchId, teamId) {
      ORDER BY p.id ASC`,
     [matchId, teamId]
   );
-  if (rows.length) return rows;
+  if (rows.length) return rows.map((r) => ({ ...r, confirmed: true }));
 
   const { rows: fallbackRows } = await db.query(
     `SELECT tp.player_id, 'regular' AS source, 0 AS goals, p.*
@@ -354,7 +366,7 @@ async function fetchEffectiveRoster(db, matchId, teamId) {
      ORDER BY p.id ASC`,
     [teamId]
   );
-  return fallbackRows;
+  return fallbackRows.map((r) => ({ ...r, confirmed: false }));
 }
 
 // Turns the read-side fallback above into real rows, the first time anyone
@@ -440,12 +452,12 @@ async function fetchMatchWithRosters(db, matchId) {
     ...match,
     home: {
       ...match.home,
-      players: homeRoster.map((row) => ({ ...playerToApiShape(row), source: row.source })),
+      players: homeRoster.map((row) => ({ ...playerToApiShape(row), source: row.source, confirmed: row.confirmed })),
       loanedOut: loanedOutByTeam[match.home.id],
     },
     away: {
       ...match.away,
-      players: awayRoster.map((row) => ({ ...playerToApiShape(row), source: row.source })),
+      players: awayRoster.map((row) => ({ ...playerToApiShape(row), source: row.source, confirmed: row.confirmed })),
       loanedOut: loanedOutByTeam[match.away.id],
     },
     scoreSubmissions: submissionRows.rows.map((r) => ({

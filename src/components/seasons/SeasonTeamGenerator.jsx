@@ -37,6 +37,14 @@ function SeasonTeamGenerator({ onPublished }) {
   // as the season itself is real, which it always is here.
   const { teams: savedTeams, loading: publishedLoading, publish } = usePublishedTeams(seasonId);
 
+  // Sorted by respondedAt (earliest first), not just filtered — when there
+  // are more confirmed players than capacity (only possible via an admin
+  // override past the normal FCFS cap), generateTeams truncates to however
+  // many fit by taking the front of this array, so the order here decides
+  // who actually gets a spot. Without this, that cutoff fell back to
+  // whatever order the API returned players in (alphabetical), silently
+  // ignoring who actually responded first — the opposite of what the
+  // waitlist system enforces during the availability phase itself.
   const eligiblePlayers = availability
     .filter((p) => p.isAvailable)
     .map((p) => ({
@@ -47,7 +55,9 @@ function SeasonTeamGenerator({ onPublished }) {
       age: p.age,
       hasPhone: p.hasPhone,
       hasApp: p.hasApp,
-    }));
+      respondedAt: p.respondedAt,
+    }))
+    .sort((a, b) => new Date(a.respondedAt) - new Date(b.respondedAt));
 
   const [searchTerm, setSearchTerm] = useState('');
   const [options, setOptions] = useState({ balanceBySkill: true, balanceByAge: false, balanceByPosition: false });

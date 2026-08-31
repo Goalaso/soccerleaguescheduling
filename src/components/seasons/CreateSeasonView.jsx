@@ -3,12 +3,33 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 
 const PLAYERS_PER_TEAM_CHOICES = [6, 8, 10, 12];
+const PLAYOFF_BUFFER_DAYS = 14;
 
 function parseTeamNames(raw) {
   return raw
     .split(',')
     .map((n) => n.trim())
     .filter(Boolean);
+}
+
+// Mirrors the backend's estimate exactly (server/src/controllers/seasons.controller.js's
+// toApiShape/addDays + matches.controller.js's numWeeks math), so what's
+// shown here before a season even exists matches what the seasons list
+// will show once its schedule is actually generated. Y/M/D components
+// (not a bare `new Date(str)`) to avoid a UTC-parse day shift.
+function computeEndDate(startsOn, numTeams, numRoundRobins, hasPlayoffs) {
+  if (!startsOn || numTeams < 2) return null;
+  const roundsPerCycle = numTeams - 1;
+  const totalWeeks = numRoundRobins * roundsPerCycle;
+  const [year, month, day] = startsOn.split('-').map(Number);
+  const end = new Date(year, month - 1, day);
+  end.setDate(end.getDate() + (totalWeeks - 1) * 7);
+  if (hasPlayoffs) end.setDate(end.getDate() + PLAYOFF_BUFFER_DAYS);
+  return end;
+}
+
+function formatEndDate(date) {
+  return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 }
 
 function CreateSeasonView({ leagues, createSeason }) {
@@ -22,12 +43,15 @@ function CreateSeasonView({ leagues, createSeason }) {
   // not disappear the first time local storage gets cleared.
   const [teamNamesInput, setTeamNamesInput] = useState(() => (user?.defaultTeamNames || []).join(', '));
   const [playersPerTeam, setPlayersPerTeam] = useState(10);
+  const [numRoundRobins, setNumRoundRobins] = useState(1);
+  const [hasPlayoffs, setHasPlayoffs] = useState(false);
   const [error, setError] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [savedDefault, setSavedDefault] = useState(false);
   const [savingDefault, setSavingDefault] = useState(false);
 
   const teamNames = parseTeamNames(teamNamesInput);
+  const estimatedEndDate = computeEndDate(startsOn, teamNames.length, numRoundRobins, hasPlayoffs);
 
   const handleSaveDefault = async () => {
     setSavingDefault(true);
@@ -56,6 +80,8 @@ function CreateSeasonView({ leagues, createSeason }) {
         playersPerTeam,
         name: name || undefined,
         startsOn: startsOn || undefined,
+        numRoundRobins,
+        hasPlayoffs,
       });
       navigate(`/seasons/${season.id}/availability`, { replace: true });
     } catch (err) {
@@ -142,6 +168,33 @@ function CreateSeasonView({ leagues, createSeason }) {
             ))}
           </select>
         </div>
+
+        <div className="option-group">
+          <span className="option-label">Number of Round Robins</span>
+          <input
+            className="select-input"
+            type="number"
+            min="1"
+            value={numRoundRobins}
+            onChange={(e) => setNumRoundRobins(Math.max(1, Number(e.target.value) || 1))}
+          />
+          <p className="empty-state-subtitle">
+            1 = every team plays every other team once. 2 = home-and-away, and so on.
+          </p>
+        </div>
+
+        <label className="checkbox-row">
+          <input type="checkbox" checked={hasPlayoffs} onChange={(e) => setHasPlayoffs(e.target.checked)} />
+          <span>Playoffs</span>
+        </label>
+
+        {estimatedEndDate ? (
+          <p className="empty-state-subtitle">Estimated end: {formatEndDate(estimatedEndDate)}</p>
+        ) : (
+          <p className="empty-state-subtitle">
+            Set a start date and at least 2 teams to see the estimated end date.
+          </p>
+        )}
 
         {error && <p className="options-warning">{error}</p>}
 

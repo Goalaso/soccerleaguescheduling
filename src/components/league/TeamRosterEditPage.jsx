@@ -1,17 +1,18 @@
 import React, { useState } from 'react';
 import { useSeasonAvailability } from '../../hooks/useSeasonAvailability';
 import { usePlayers } from '../../hooks/usePlayers';
+import TeamRosterCard from './TeamRosterCard';
+import SeasonSubPoolCard from './SeasonSubPoolCard';
 
 // Admin-only, permanent season-long roster changes — distinct from the
 // per-match loans on the schedule/record-results screens. Moving a player
 // updates team_players for the rest of the season; it doesn't touch any
 // match that's already been played (match_rosters keeps its own snapshot).
-// Its own page rather than a collapsible panel on the team profile — the
-// controls (captain picker, per-player move/remove, two separate add
-// flows) were cramped and easy to trigger by accident inline.
+// Laid out like the team generator's card grid (a card for this team, a
+// card for who could be added to it) rather than plain list rows, for the
+// same at-a-glance position/skill visibility that screen has.
 function TeamRosterEditPage({ team, allTeams, seasonId, onBack, addSeasonPlayer, removeSeasonPlayer, moveSeasonPlayer, setCaptain }) {
   const [busy, setBusy] = useState(false);
-  const [addPick, setAddPick] = useState('');
   const [newSeasonPick, setNewSeasonPick] = useState('');
   const { players: availability, addToSeason } = useSeasonAvailability(seasonId);
   const { players: allPlayers } = usePlayers();
@@ -41,10 +42,7 @@ function TeamRosterEditPage({ team, allTeams, seasonId, onBack, addSeasonPlayer,
     withBusy(() => moveSeasonPlayer(team.id, playerId, Number(toTeamId)));
   };
   const handleRemove = (playerId) => withBusy(() => removeSeasonPlayer(team.id, playerId));
-  const handleAdd = () => {
-    if (!addPick) return;
-    withBusy(() => addSeasonPlayer(team.id, Number(addPick))).then(() => setAddPick(''));
-  };
+  const handleAdd = (playerId) => withBusy(() => addSeasonPlayer(team.id, playerId));
   const handleAddToSeason = () => {
     if (!newSeasonPick) return;
     withBusy(() => addToSeason(Number(newSeasonPick))).then(() => setNewSeasonPick(''));
@@ -81,48 +79,14 @@ function TeamRosterEditPage({ team, allTeams, seasonId, onBack, addSeasonPlayer,
             ))}
           </select>
         </div>
+      </div>
 
-        {team.players.map((p) => (
-          <div className="checkbox-row" key={p.id}>
-            <span>{p.name}</span>
-            <select
-              className="select-input"
-              value=""
-              disabled={busy}
-              onChange={(e) => handleMove(p.id, e.target.value)}
-            >
-              <option value="">Move to...</option>
-              {otherTeams.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              className="link-btn link-btn-danger"
-              disabled={busy}
-              onClick={() => handleRemove(p.id)}
-            >
-              Remove
-            </button>
-          </div>
-        ))}
+      <div className="team-grid">
+        <TeamRosterCard team={team} otherTeams={otherTeams} busy={busy} onMove={handleMove} onRemove={handleRemove} />
+        <SeasonSubPoolCard players={subPool} busy={busy} onAdd={handleAdd} />
+      </div>
 
-        <div className="roster-manager-add-row">
-          <select className="select-input" value={addPick} onChange={(e) => setAddPick(e.target.value)}>
-            <option value="">Add player from sub pool...</option>
-            {subPool.map((p) => (
-              <option key={p.playerId} value={p.playerId}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-          <button type="button" className="outline-btn" disabled={busy || !addPick} onClick={handleAdd}>
-            Add
-          </button>
-        </div>
-
+      <div className="panel roster-add-to-season-panel">
         <div className="option-group roster-manager-add-row">
           <span className="option-label">Add to this season</span>
           <select

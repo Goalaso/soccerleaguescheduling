@@ -2,10 +2,14 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ConfirmPasswordModal from '../ConfirmPasswordModal';
 import { useSelectedSeason } from '../../context/SelectedSeasonContext';
+import { formatMatchDate, parseMatchDate } from '../../utils/season';
 
-function statusLabel(status) {
-  return status === 'collecting_availability' ? 'Collecting Availability' : 'Teams Generated';
-}
+const DISPLAY_STATUS_LABELS = {
+  collecting_availability: 'Collecting Availability',
+  teams_generated: 'Teams Generated',
+  in_progress: 'In Progress',
+  complete: 'Complete',
+};
 
 function SeasonsListView({ seasons, loading, deleteSeason }) {
   const navigate = useNavigate();
@@ -50,9 +54,18 @@ function SeasonsListView({ seasons, loading, deleteSeason }) {
                 <span className="season-row-name">{s.name}</span>
                 <span className="season-row-meta">
                   {s.leagueName} &middot; {s.numTeams} teams
+                  {s.startsOn && (
+                    <>
+                      {' '}
+                      &middot; {formatMatchDate(parseMatchDate(s.startsOn))}
+                      {s.endsOn && <> &ndash; {formatMatchDate(parseMatchDate(s.endsOn))}</>}
+                    </>
+                  )}
                 </span>
               </div>
-              <span className={`badge badge-count season-status-${s.status}`}>{statusLabel(s.status)}</span>
+              <span className={`badge badge-count season-status-${s.displayStatus}`}>
+                {DISPLAY_STATUS_LABELS[s.displayStatus] || s.displayStatus}
+              </span>
               {s.status === 'collecting_availability' ? (
                 <button
                   className="outline-btn"

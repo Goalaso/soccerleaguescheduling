@@ -39,18 +39,20 @@ function RosterColumn({ team, goalsByPlayer, onChange }) {
             <span className="record-player-number">{i + 1}</span>
             <span className="record-player-name">{p.name}</span>
             <span className="record-player-position">{POSITION_ABBR[p.position]}</span>
-            <button
-              type="button"
-              className="stepper-btn"
-              onClick={() => onChange(p.id, Math.max(0, count - 1))}
-              disabled={count === 0}
-            >
-              &minus;
-            </button>
-            <span className="record-player-count">{count}</span>
-            <button type="button" className="stepper-btn" onClick={() => onChange(p.id, count + 1)}>
-              +
-            </button>
+            <div className="record-goal-controls">
+              <button
+                type="button"
+                className="stepper-btn"
+                onClick={() => onChange(p.id, Math.max(0, count - 1))}
+                disabled={count === 0}
+              >
+                &minus;
+              </button>
+              <span className="record-player-count">{count}</span>
+              <button type="button" className="stepper-btn" onClick={() => onChange(p.id, count + 1)}>
+                +
+              </button>
+            </div>
           </div>
         );
       })}
@@ -143,7 +145,12 @@ function RosterManager({ match, teams, seasonId, matches, addToRoster, removeFro
 
   const renderTeam = (team) => {
     const fullRoster = fullRosterFor(team.id);
-    const confirmedIds = new Set(team.players.map((p) => p.id));
+    // team.players is the match's effective roster, which still falls back
+    // to listing the whole season roster before anyone's touched this
+    // match — that's so the team stays visible (e.g. to log a goal), not
+    // because everyone's actually confirmed. p.confirmed distinguishes a
+    // real roll-call/add row from that fallback.
+    const confirmedIds = new Set(team.players.filter((p) => p.confirmed).map((p) => p.id));
     const guests = team.players.filter((p) => p.source !== 'regular');
 
     const borrowable = teams
@@ -155,10 +162,11 @@ function RosterManager({ match, teams, seasonId, matches, addToRoster, removeFro
           // is live (this match's own fetched data), not the possibly-stale
           // season list, since it's kept in sync with every add/remove here.
           const matchTeam = t.id === match.home.id ? match.home : match.away;
-          const attendingIds = new Set(matchTeam.players.map((p) => p.id));
+          const attendingPlayers = matchTeam.players.filter((p) => p.confirmed);
+          const attendingIds = new Set(attendingPlayers.map((p) => p.id));
           return t.players
             .filter((p) => attendingIds.has(p.id))
-            .map((p) => ({ ...p, teamName: t.name, count: matchTeam.players.length }));
+            .map((p) => ({ ...p, teamName: t.name, count: attendingPlayers.length }));
         }
         // Not playing this match — no per-match attendance signal exists for
         // them, so fall back to season availability (same signal subPool uses).

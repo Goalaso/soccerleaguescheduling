@@ -1,13 +1,9 @@
-const {
-  SecretsManagerClient,
-  GetSecretValueCommand,
-  PutSecretValueCommand,
-} = require('@aws-sdk/client-secrets-manager');
+const { SSMClient, GetParameterCommand, PutParameterCommand } = require('@aws-sdk/client-ssm');
 
 const TOKEN_ENDPOINT = 'https://login.microsoftonline.com/consumers/oauth2/v2.0/token';
 const GRAPH_BASE = 'https://graph.microsoft.com/v1.0';
 
-const smClient = new SecretsManagerClient({});
+const ssmClient = new SSMClient({});
 
 // Cached for the lifetime of a warm Lambda container — same pattern as
 // server/src/lambda.js's handlerPromise, avoids a token refresh (and the
@@ -15,22 +11,24 @@ const smClient = new SecretsManagerClient({});
 let cachedAccessToken = null; // { token, expiresAt }
 
 async function readSecret() {
-  const result = await smClient.send(
-    new GetSecretValueCommand({ SecretId: process.env.OUTLOOK_SECRET_ARN })
+  const result = await ssmClient.send(
+    new GetParameterCommand({ Name: process.env.OUTLOOK_SECRET_PARAM, WithDecryption: true })
   );
-  return JSON.parse(result.SecretString);
+  return JSON.parse(result.Parameter.Value);
 }
 
 // Microsoft rotates the refresh token on every use — the old one stops
 // working once a new one is issued, so it has to be written back here or
 // the *next* refresh fails. This is why the Lambda role needs
-// PutSecretValue on this one secret, unlike the read-only database/JWT
-// secrets (see infra/lib/infra-stack.ts).
+// ssm:PutParameter on this one parameter, unlike the read-only
+// database/JWT parameters (see infra/lib/infra-stack.ts).
 async function writeSecret(secret) {
-  await smClient.send(
-    new PutSecretValueCommand({
-      SecretId: process.env.OUTLOOK_SECRET_ARN,
-      SecretString: JSON.stringify(secret),
+  await ssmClient.send(
+    new PutParameterCommand({
+      Name: process.env.OUTLOOK_SECRET_PARAM,
+      Value: JSON.stringify(secret),
+      Type: 'SecureString',
+      Overwrite: true,
     })
   );
 }
@@ -104,6 +102,36 @@ async function sendEmail({ to, subject, body }) {
   });
 }
 
+const BATCH_SIZE = 5;
+const BATCH_DELAY_MS = 1000;
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// A bulk send (e.g. "are you available" to a whole season roster) firing
+// every recipient at once is what triggered Graph's ApplicationThrottled /
+// MailboxConcurrency 429s at ~40 recipients in testing. Sending in small
+// batches with a pause between them keeps concurrency low. Callers must stay
+// mindful this runs on the request's critical path (awaited before the HTTP
+// response) and HttpApi has a hard, non-configurable 30s integration
+// timeout — these constants are tuned to stay well under that for
+// realistic recipient counts; a truly unbounded recipient list would need
+// sending moved off the request path entirely (e.g. a queue), not just
+// batched.
+async function sendEmailBatch(messages) {
+  const results = [];
+  for (let i = 0; i < messages.length; i += BATCH_SIZE) {
+    const batch = messages.slice(i, i + BATCH_SIZE);
+    const batchResults = await Promise.allSettled(batch.map((m) => sendEmail(m)));
+    results.push(...batchResults);
+    if (i + BATCH_SIZE < messages.length) {
+      await sleep(BATCH_DELAY_MS);
+    }
+  }
+  return results;
+}
+
 // Notification types that also go out by email, for recipients who've opted
 // in. Starts with just the one case where missing it in-app — because you
 // didn't happen to open the app — has a real cost: a missed availability
@@ -118,4 +146,4 @@ const EMAIL_NOTIFIED_TYPES = [
   'team_roster_changed',
 ];
 
-module.exports = { getAccessToken, sendEmail, graphFetch, EMAIL_NOTIFIED_TYPES };
+module.exports = { getAccessToken, sendEmail, sendEmailBatch, graphFetch, EMAIL_NOTIFIED_TYPES };

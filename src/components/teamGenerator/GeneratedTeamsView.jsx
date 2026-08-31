@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import TeamCard from './TeamCard';
+import UnassignedTeamCard from './UnassignedTeamCard';
 
 function GeneratedTeamsView({
   teams,
@@ -57,36 +58,8 @@ function GeneratedTeamsView({
             onRename={(name) => onRenameTeam(team.id, name)}
           />
         ))}
+        {editing && <UnassignedTeamCard players={unassignedPlayers} teams={teams} onAddPlayer={onAddPlayer} />}
       </div>
-
-      {editing && (
-        <div className="panel unassigned-players-panel">
-          <h3 className="panel-title">Unassigned Players</h3>
-          {unassignedPlayers.length === 0 ? (
-            <p className="empty-state-subtitle">Every eligible player is on a team.</p>
-          ) : (
-            <div className="unassigned-players-list">
-              {unassignedPlayers.map((p) => (
-                <div className="unassigned-player-chip" key={p.id}>
-                  <span>{p.name}</span>
-                  <select
-                    className="select-input"
-                    value=""
-                    onChange={(e) => e.target.value && onAddPlayer(p.id, Number(e.target.value))}
-                  >
-                    <option value="">Add to...</option>
-                    {teams.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
     </div>
   );
 }

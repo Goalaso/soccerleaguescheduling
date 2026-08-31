@@ -3,7 +3,7 @@ import * as cdk from 'aws-cdk-lib/core';
 import { Construct } from 'constructs';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs';
-import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
+import * as kms from 'aws-cdk-lib/aws-kms';
 import * as events from 'aws-cdk-lib/aws-events';
 import * as targets from 'aws-cdk-lib/aws-events-targets';
 import * as apigatewayv2 from 'aws-cdk-lib/aws-apigatewayv2';
@@ -21,44 +21,42 @@ export class InfraStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
-    // Secrets were provisioned out-of-band (see project plan) — the actual
-    // values never pass through this stack's code or CloudFormation template.
-    // Using the exact full ARN (not fromSecretNameV2's suffix-less partial
-    // ARN) so the ARN used at runtime (GetSecretValue) and the ARN used in
-    // the generated IAM policy (grantRead) are the same string — a partial
-    // ARN without the random suffix doesn't match grantRead's
-    // suffix-wildcard resource pattern, which is an AccessDenied trap.
-    const dbUrlSecret = secretsmanager.Secret.fromSecretCompleteArn(
-      this,
-      'DatabaseUrlSecret',
-      'arn:aws:secretsmanager:us-east-1:913524936355:secret:bisl/database-url-RjIb4n'
-    );
-    const jwtSecret = secretsmanager.Secret.fromSecretCompleteArn(
-      this,
-      'JwtSecret',
-      'arn:aws:secretsmanager:us-east-1:913524936355:secret:bisl/jwt-secret-1KU4vz'
-    );
-    // Client ID/secret + a refresh token for the Outlook/Graph waitlist
-    // mailbox. Unlike the two secrets above, this one is also *written to*
-    // at runtime — Microsoft rotates the refresh token on every use (see
-    // server/src/services/email.js), so the Lambda needs write access, not
-    // just read.
-    const outlookSecret = secretsmanager.Secret.fromSecretCompleteArn(
-      this,
-      'OutlookSecret',
-      'arn:aws:secretsmanager:us-east-1:913524936355:secret:bisl/outlook-email-oW7r3v'
-    );
+    // Parameter values were provisioned out-of-band (migrated from the prior
+    // Secrets Manager secrets) — the actual values never pass through this
+    // stack's code or CloudFormation template. SSM Parameter Store's
+    // Standard tier is used instead of Secrets Manager: it's free (no
+    // per-parameter monthly fee, unlike Secrets Manager's $0.40/secret/mo),
+    // and none of these three ever used Secrets Manager's built-in rotation
+    // — the Outlook one rotates its own refresh token in application code
+    // (see server/src/services/email.js), so there's no capability lost.
+    //
+    // Referenced by name (not a `ssm.StringParameter` construct) because the
+    // only thing needed here is the ARN for IAM policy scoping — resolving
+    // `.stringValue` would bake the decrypted value into the CloudFormation
+    // template/Lambda config as a dynamic reference, which is exactly what
+    // provisioning out-of-band is meant to avoid. The Lambda reads the
+    // actual value at runtime via the SDK instead (same pattern the old
+    // Secrets Manager code used).
+    const DB_URL_PARAM = '/bisl/database-url';
+    const JWT_PARAM = '/bisl/jwt-secret';
+    const OUTLOOK_PARAM = '/bisl/outlook-email';
+    const ssmParamArn = (name: string) => `arn:aws:ssm:${this.region}:${this.account}:parameter${name}`;
 
     const apiFunction = new NodejsFunction(this, 'ApiFunction', {
       entry: path.join(__dirname, '../../server/src/lambda.js'),
       depsLockFilePath: path.join(__dirname, '../../server/package-lock.json'),
       runtime: lambda.Runtime.NODEJS_20_X,
       memorySize: 256,
-      timeout: cdk.Duration.seconds(15),
+      // HttpApi has a hard, non-configurable 30s integration timeout — this
+      // stays under that so a slow request (e.g. season creation's batched
+      // bulk-email send, see sendEmailBatch in server/src/services/email.js)
+      // gets a real Lambda timeout error instead of a generic API Gateway
+      // 504.
+      timeout: cdk.Duration.seconds(28),
       environment: {
-        DATABASE_URL_SECRET_ARN: dbUrlSecret.secretArn,
-        JWT_SECRET_ARN: jwtSecret.secretArn,
-        OUTLOOK_SECRET_ARN: outlookSecret.secretArn,
+        DATABASE_URL_PARAM: DB_URL_PARAM,
+        JWT_SECRET_PARAM: JWT_PARAM,
+        OUTLOOK_SECRET_PARAM: OUTLOOK_PARAM,
         NODE_ENV: 'production',
       },
       bundling: {
@@ -71,10 +69,28 @@ export class InfraStack extends cdk.Stack {
         ],
       },
     });
-    dbUrlSecret.grantRead(apiFunction);
-    jwtSecret.grantRead(apiFunction);
-    outlookSecret.grantRead(apiFunction);
-    outlookSecret.grantWrite(apiFunction);
+    // ssm:GetParameter alone doesn't decrypt a SecureString — the AWS-managed
+    // key's resource policy allows the account to use it, but the calling
+    // role still needs its own explicit kms:Decrypt/kms:GenerateDataKey
+    // grant. All three parameters share the same default key, so one grant
+    // covers all of them.
+    apiFunction.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['ssm:GetParameter'],
+        resources: [ssmParamArn(DB_URL_PARAM), ssmParamArn(JWT_PARAM), ssmParamArn(OUTLOOK_PARAM)],
+      })
+    );
+    // Only the Outlook parameter is written to at runtime — Microsoft
+    // rotates the refresh token on every use (see
+    // server/src/services/email.js), so only this one needs write access,
+    // unlike the read-only database/JWT parameters.
+    apiFunction.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['ssm:PutParameter'],
+        resources: [ssmParamArn(OUTLOOK_PARAM)],
+      })
+    );
+    kms.Alias.fromAliasName(this, 'SsmDefaultKey', 'alias/aws/ssm').grantEncryptDecrypt(apiFunction);
 
     // Polls the waitlist mailbox on a schedule — lambda.js branches on the
     // event shape EventBridge delivers (event.source === 'aws.events') to

@@ -11,10 +11,23 @@
   min-width: 160px;
 }
 
+/* Fill the rest of the viewport instead of growing the whole page past the
+   browser window as seasons pile up — same pattern as .availability-panel
+   below and .manage-players-panel. Header stays put; only the list scrolls. */
+.seasons-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 220px);
+}
+
 .season-list {
   display: flex;
   flex-direction: column;
   gap: 0.6rem;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .season-row {
@@ -42,9 +55,48 @@
   font-size: 0.8rem;
 }
 
+/* collecting_availability has no override — it keeps the default
+   .badge-count blue/accent styling (waiting on input). */
+
 .season-status-teams_generated {
+  background: rgba(139, 147, 167, 0.18);
+  color: var(--text-dim);
+}
+
+.season-status-in_progress {
   background: rgba(34, 197, 94, 0.18);
   color: var(--success-text);
+}
+
+.season-status-complete {
+  background: rgba(124, 150, 255, 0.14);
+  color: var(--text-muted);
+}
+
+/* # (response order), Player, Position, Skill, Responded, Available — two
+   more columns than the bare .player-table-row default, so this needs its
+   own explicit track list (see shared.css's comment on that base rule). */
+.availability-review-row {
+  grid-template-columns: 0.4fr 1.3fr 0.8fr 0.5fr 1.3fr 1.5fr;
+}
+
+/* Fill the rest of the viewport instead of a short fixed-height box that
+   cuts off after a handful of rows — same pattern .manage-players-panel
+   already uses. The header (title/button/column labels) stays put; only
+   the row list scrolls, so a season with 40+ responses doesn't need the
+   whole page to grow past the browser window to see them all. */
+.availability-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 220px);
+}
+
+.availability-panel .player-table {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+  overflow-y: auto;
 }
 
 .availability-check {

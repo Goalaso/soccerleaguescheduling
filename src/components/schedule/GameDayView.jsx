@@ -31,7 +31,13 @@ function fullDate(date) {
 // team's name) covering both cases, since the "different match entirely"
 // case has no other trace in this match's own data at all.
 function buildRosterRows(fullRoster, matchPlayers, team) {
-  const confirmedIds = new Set(matchPlayers.map((p) => p.id));
+  // matchPlayers is the match's *effective* roster, which still includes a
+  // fallback listing of the whole season roster before anyone's touched
+  // this match at all — that fallback is there so the team is still visible
+  // (e.g. to log a goal), not because everyone showed up. p.confirmed
+  // distinguishes a real roll-call row from that fallback; only real rows
+  // count as actually confirmed here.
+  const confirmedIds = new Set(matchPlayers.filter((p) => p.confirmed).map((p) => p.id));
   const fullIds = new Set((fullRoster || []).map((p) => p.id));
   const loanedOut = team.loanedOut || {};
 
@@ -100,23 +106,25 @@ function RosterColumn({ team, fullRoster, isMyTeam, scorers, mode, onToggle, tog
                 )}
               </span>
               <span className="record-player-position">{POSITION_ABBR[p.position]}</span>
-              <button
-                type="button"
-                className="stepper-btn"
-                onClick={() => onGoalChange(p.id, Math.max(0, count - 1))}
-                disabled={!p.confirmed || count === 0}
-              >
-                &minus;
-              </button>
-              <span className="record-player-count">{count}</span>
-              <button
-                type="button"
-                className="stepper-btn"
-                onClick={() => onGoalChange(p.id, count + 1)}
-                disabled={!p.confirmed}
-              >
-                +
-              </button>
+              <div className="record-goal-controls">
+                <button
+                  type="button"
+                  className="stepper-btn"
+                  onClick={() => onGoalChange(p.id, Math.max(0, count - 1))}
+                  disabled={!p.confirmed || count === 0}
+                >
+                  &minus;
+                </button>
+                <span className="record-player-count">{count}</span>
+                <button
+                  type="button"
+                  className="stepper-btn"
+                  onClick={() => onGoalChange(p.id, count + 1)}
+                  disabled={!p.confirmed}
+                >
+                  +
+                </button>
+              </div>
             </div>
           );
         }

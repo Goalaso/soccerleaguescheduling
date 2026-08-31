@@ -20,6 +20,25 @@
   gap: 1.5rem;
 }
 
+/* Capped to the browser viewport instead of sizing to content (was cut off
+   after a handful of rows) — same explicit calc(100vh - ...) pattern as
+   .availability-panel/.seasons-panel/.manage-players-panel, not a bare
+   flex:1 chain, since that only reliably fills the viewport if every
+   ancestor up to the page root already has a definite height, which isn't
+   guaranteed here. Only the row list scrolls; the search header stays put. */
+.generator-available-players-panel {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 220px);
+}
+
+.generator-available-players-panel .player-table {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+  overflow-y: auto;
+}
+
 /* Options panel */
 .option-group {
   margin-bottom: 1.5rem;
@@ -165,24 +184,19 @@
   font-size: 0.75rem;
 }
 
-.unassigned-players-panel {
-  margin-top: 1.5rem;
-}
-
-.unassigned-players-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.6rem;
-}
-
-.unassigned-player-chip {
-  display: flex;
-  align-items: center;
+/* One more column than team-player-row (name, position, skill, add-to
+   dropdown, all visible at once) — an unassigned player is always in "pick
+   a team for them" mode, so skill/position stay on screen right alongside
+   the dropdown instead of being swapped out for it. */
+.unassigned-player-row {
+  grid-template-columns: 1fr 0.8fr 0.9fr 1fr;
   gap: 0.5rem;
-  background: var(--bg-panel-alt);
-  border: 1px solid var(--border-subtle);
-  border-radius: 6px;
-  padding: 0.4rem 0.6rem;
+  font-size: 0.85rem;
+}
+
+.unassigned-player-row .select-input {
+  padding: 0.3rem 0.5rem;
+  font-size: 0.75rem;
 }
 
 .team-balance-row {

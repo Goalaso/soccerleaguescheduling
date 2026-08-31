@@ -1,4 +1,4 @@
-const { SecretsManagerClient, GetSecretValueCommand } = require('@aws-sdk/client-secrets-manager');
+const { SSMClient, GetParameterCommand } = require('@aws-sdk/client-ssm');
 
 let handlerPromise;
 let dbEnvPromise;
@@ -9,13 +9,13 @@ let dbEnvPromise;
 async function ensureDbEnv() {
   if (!dbEnvPromise) {
     dbEnvPromise = (async () => {
-      const client = new SecretsManagerClient({});
-      const [dbSecret, jwtSecret] = await Promise.all([
-        client.send(new GetSecretValueCommand({ SecretId: process.env.DATABASE_URL_SECRET_ARN })),
-        client.send(new GetSecretValueCommand({ SecretId: process.env.JWT_SECRET_ARN })),
+      const client = new SSMClient({});
+      const [dbParam, jwtParam] = await Promise.all([
+        client.send(new GetParameterCommand({ Name: process.env.DATABASE_URL_PARAM, WithDecryption: true })),
+        client.send(new GetParameterCommand({ Name: process.env.JWT_SECRET_PARAM, WithDecryption: true })),
       ]);
-      process.env.DATABASE_URL = dbSecret.SecretString;
-      process.env.JWT_SECRET = jwtSecret.SecretString;
+      process.env.DATABASE_URL = dbParam.Parameter.Value;
+      process.env.JWT_SECRET = jwtParam.Parameter.Value;
     })().catch((err) => {
       dbEnvPromise = null;
       throw err;

@@ -53,6 +53,16 @@
     font-size: 0.85rem;
   }
 
+  /* Drop Skill (least essential for the FCFS-order question this screen is
+     for) so #/Player/Position/Responded/Available still all fit. */
+  .player-table-row.availability-review-row {
+    grid-template-columns: 0.4fr 1.3fr 0.8fr 1.2fr 1.4fr;
+    font-size: 0.85rem;
+  }
+  .player-table-row.availability-review-row span:nth-child(4) {
+    display: none;
+  }
+
   /* 9 visible cells (#, Team, MP, W, D, L, GD, GF, PTS) need to match the
      explicit track count or the extras land in broken implicit columns —
      hide GD and GF here so 7 visible cells map to 7 tracks. */

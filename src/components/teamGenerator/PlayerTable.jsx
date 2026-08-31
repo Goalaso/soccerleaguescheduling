@@ -19,7 +19,7 @@ function PlayerTable({ players, searchTerm, onSearchChange }) {
   );
 
   return (
-    <div className="panel players-panel">
+    <div className="panel players-panel generator-available-players-panel">
       <div className="players-panel-header">
         <h3 className="panel-title">Available Players ({players.length})</h3>
         <input

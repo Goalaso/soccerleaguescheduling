@@ -1,6 +1,42 @@
 const bcrypt = require('bcryptjs');
 const pool = require('../db/pool');
-const { sendEmail, getAccessToken, EMAIL_NOTIFIED_TYPES } = require('../services/email');
+const { sendEmail, getAccessToken, sendEmailBatch, EMAIL_NOTIFIED_TYPES } = require('../services/email');
+
+// Four states shown to the admin, derived rather than stored — the raw
+// `status` column only ever tracks two (collecting_availability vs
+// teams_generated, the one write-time transition that actually happens).
+// "In progress" vs "complete" are just readings of that same
+// teams_generated season's own match data, not a separate lifecycle to
+// keep in sync at write time: no schema change, and it can never drift
+// from what the schedule actually shows.
+function deriveDisplayStatus(row) {
+  if (row.status !== 'teams_generated') return row.status;
+  const total = Number(row.total_matches) || 0;
+  const played = Number(row.played_matches) || 0;
+  if (total > 0 && played === total) return 'complete';
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const startsOn = row.starts_on ? new Date(row.starts_on) : null;
+  const started = played > 0 || (startsOn && startsOn <= today);
+  return started ? 'in_progress' : 'teams_generated';
+}
+
+// dateStr is a raw 'YYYY-MM-DD' string (see server/src/db/pool.js's DATE
+// type-parser override) — building/re-serializing via Y/M/D components
+// directly avoids the UTC-parse day-shift a bare `new Date(str)` risks.
+function addDays(dateStr, days) {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  const d = new Date(year, month - 1, day);
+  d.setDate(d.getDate() + days);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+// No real playoff matches exist yet (see the plan: generation is deferred
+// to a future task), so a season with playoffs enabled just gets its
+// estimated end date pushed out by a fixed buffer past its last real
+// (regular-season) match — same 2-week estimate CreateSeasonView's live
+// preview uses before any matches exist at all.
+const PLAYOFF_BUFFER_DAYS = 14;
 
 function toApiShape(row) {
   return {
@@ -8,10 +44,18 @@ function toApiShape(row) {
     leagueId: row.league_id,
     leagueName: row.league_name,
     status: row.status,
+    displayStatus: deriveDisplayStatus(row),
     name: row.name,
     startsOn: row.starts_on,
+    endsOn: row.last_match_date
+      ? row.has_playoffs
+        ? addDays(row.last_match_date, PLAYOFF_BUFFER_DAYS)
+        : row.last_match_date
+      : null,
     numTeams: row.num_teams,
     playersPerTeam: row.players_per_team,
+    numRoundRobins: row.num_round_robins,
+    hasPlayoffs: row.has_playoffs,
     teamNames: row.team_names || [],
     balanceBySkill: row.balance_by_skill,
     balanceByAge: row.balance_by_age,
@@ -19,6 +63,20 @@ function toApiShape(row) {
     createdAt: row.created_at,
   };
 }
+
+// Shared by list/getOne — season's own columns plus enough match data
+// (counts + date range) to derive the 4-state display status and an "ends
+// on" date, without a schema change (seasons has no end-date column; the
+// last scheduled match date is the natural stand-in).
+const SEASON_SELECT = `
+  SELECT s.*, l.name AS league_name,
+         COUNT(m.id)::int AS total_matches,
+         COUNT(m.id) FILTER (WHERE m.status = 'played')::int AS played_matches,
+         MAX(m.match_date) AS last_match_date
+  FROM seasons s
+  JOIN leagues l ON l.id = s.league_id
+  LEFT JOIN matches m ON m.season_id = s.id
+`;
 
 async function list(req, res, next) {
   try {
@@ -30,11 +88,7 @@ async function list(req, res, next) {
       where = 'WHERE s.league_id = $1';
     }
     const { rows } = await pool.query(
-      `SELECT s.*, l.name AS league_name
-       FROM seasons s
-       JOIN leagues l ON l.id = s.league_id
-       ${where}
-       ORDER BY s.id DESC`,
+      `${SEASON_SELECT} ${where} GROUP BY s.id, l.name ORDER BY s.id DESC`,
       params
     );
     res.json(rows.map(toApiShape));
@@ -45,10 +99,7 @@ async function list(req, res, next) {
 
 async function getOne(req, res, next) {
   try {
-    const { rows } = await pool.query(
-      `SELECT s.*, l.name AS league_name FROM seasons s JOIN leagues l ON l.id = s.league_id WHERE s.id = $1`,
-      [req.params.id]
-    );
+    const { rows } = await pool.query(`${SEASON_SELECT} WHERE s.id = $1 GROUP BY s.id, l.name`, [req.params.id]);
     if (!rows[0]) return res.status(404).json({ error: 'Season not found' });
     res.json(toApiShape(rows[0]));
   } catch (err) {
@@ -67,6 +118,8 @@ async function create(req, res, next) {
     name,
     startsOn,
     teamNames: rawTeamNames,
+    numRoundRobins,
+    hasPlayoffs,
   } = req.body;
 
   // Trimmed/filtered server-side too, not just trusting the frontend — and
@@ -96,8 +149,8 @@ async function create(req, res, next) {
 
     const { rows: seasonRows } = await client.query(
       `INSERT INTO seasons
-         (league_id, num_teams, players_per_team, balance_by_skill, balance_by_age, balance_by_position, name, starts_on, created_by, team_names)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+         (league_id, num_teams, players_per_team, balance_by_skill, balance_by_age, balance_by_position, name, starts_on, created_by, team_names, num_round_robins, has_playoffs)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
        RETURNING id`,
       [
         leagueId,
@@ -110,6 +163,8 @@ async function create(req, res, next) {
         startsOn || null,
         req.user.sub,
         teamNames.length ? teamNames : null,
+        Number(numRoundRobins) > 0 ? Number(numRoundRobins) : 1,
+        !!hasPlayoffs,
       ]
     );
     const seasonId = seasonRows[0].id;
@@ -159,9 +214,9 @@ async function create(req, res, next) {
              AND COALESCE(u.email, p.email) IS NOT NULL`,
           [seasonId]
         );
-        // Warmed once, sequentially, before the parallel batch below —
-        // getAccessToken() caches its result, but with no warm-up every one
-        // of these concurrent sendEmail calls could see an expired/missing
+        // Warmed once, sequentially, before the batched sends below —
+        // getAccessToken() caches its result, but with no warm-up the first
+        // batch's concurrent sendEmail calls could see an expired/missing
         // cached token at the same instant and race to refresh it
         // simultaneously, all using the same refresh token. Microsoft only
         // honors one such concurrent exchange; the rest would fail. Calling
@@ -169,18 +224,17 @@ async function create(req, res, next) {
         // already-valid cached token instead of racing for it.
         await getAccessToken();
 
-        // allSettled never rejects, even if every single send fails — it
-        // has to be inspected explicitly, or a real per-recipient failure
-        // (bad token, Graph error, etc.) disappears with zero logging and
-        // looks indistinguishable from a successful, silent send.
-        const results = await Promise.allSettled(
-          recipients.map((r) =>
-            sendEmail({
-              to: r.email,
-              subject: `Are you available for ${seasonLabel}?`,
-              body: `Are you available to play in ${seasonLabel} (${leagueName})?\n\nReply to this email with just the word YES or NO to let us know — or log in to the app to respond there instead.\n\n[ref: SA-${seasonId}-${r.player_id}]`,
-            })
-          )
+        // sendEmailBatch never rejects per-message, even if every single
+        // send fails — it has to be inspected explicitly, or a real
+        // per-recipient failure (bad token, Graph throttling, etc.)
+        // disappears with zero logging and looks indistinguishable from a
+        // successful, silent send.
+        const results = await sendEmailBatch(
+          recipients.map((r) => ({
+            to: r.email,
+            subject: `Are you available for ${seasonLabel}?`,
+            body: `Are you available to play in ${seasonLabel} (${leagueName})?\n\nReply to this email with just the word YES or NO to let us know — or log in to the app to respond there instead.\n\n[ref: SA-${seasonId}-${r.player_id}]`,
+          }))
         );
         results.forEach((r, i) => {
           if (r.status === 'rejected') {

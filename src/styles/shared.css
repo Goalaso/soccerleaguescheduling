@@ -294,7 +294,8 @@
 .team-player-row,
 .record-player-row,
 .player-manage-row,
-.roster-table-row {
+.roster-table-row,
+.unassigned-player-row {
   display: grid;
   align-items: center;
 }
@@ -319,7 +320,8 @@
 .team-player-row > *,
 .record-player-row > *,
 .player-manage-row > *,
-.roster-table-row > * {
+.roster-table-row > *,
+.unassigned-player-row > * {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
