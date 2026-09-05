@@ -73,6 +73,11 @@
   margin-left: auto;
 }
 
+.player-league-filter {
+  width: auto;
+  min-width: 150px;
+}
+
 /* Standings table */
 .standings-table {
   display: flex;
@@ -381,9 +386,68 @@
   text-align: right;
 }
 
+/* Two cards side by side — the main stats/roster list (wide, most of the
+   information) and the narrower "Available to Add" pool. Non-admins only
+   ever see the first card (no roster-editing capability), so they get a
+   single full-width column instead of an empty gap where the second one
+   would be. */
+.player-stats-grid {
+  grid-template-columns: 2fr 1fr;
+  align-items: stretch;
+}
+
+.player-stats-grid-solo {
+  grid-template-columns: 1fr;
+}
+
+/* Fill the rest of the viewport instead of a short fixed-height box that
+   cuts off after a handful of rows — same pattern .manage-players-panel/
+   .availability-panel/.seasons-panel already use. Header (breadcrumb +
+   column labels) stays put; only the row list scrolls. 220px (the offset
+   those other panels use) isn't enough headroom here specifically — this
+   page also has <SeasonSelector>'s league/season dropdowns AND its own
+   ".notify-breadcrumb" above the panel, neither of which the other pages
+   this pattern is borrowed from have, so the extra ~140px accounts for
+   those two rows on top of the same PageBanner/.generator-content chrome. */
+.player-stats-card {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 360px);
+}
+
+.player-stats-card .team-player-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* Non-admin: Player/Position/Skill/Team/Games/Goals. Admin adds a Move
+   column — same escalation pattern as player-stats-panel-admin used
+   before this became two side-by-side cards. */
+.player-stats-row {
+  grid-template-columns: 1.3fr 0.9fr 0.9fr 1fr 0.6fr 0.6fr;
+  gap: 0.5rem;
+  padding: 0.5rem 0.25rem;
+  font-size: 0.85rem;
+}
+
+.player-stats-row-admin {
+  grid-template-columns: 1.3fr 0.9fr 0.9fr 1fr 0.6fr 0.6fr 1.1fr;
+}
+
+.player-stats-row:not(.player-table-head):not(:last-child) {
+  border-bottom: 1px solid var(--row-divider);
+}
+
 /* Roster table (league profile) */
 .roster-table-row {
   grid-template-columns: 1.6fr 1.2fr 0.6fr 0.6fr 0.6fr;
+}
+
+.roster-table-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
 }
 
 /* Skill by position */

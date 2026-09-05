@@ -115,10 +115,7 @@ function LeaguePage() {
   const {
     teams: savedTeams,
     loading: teamsLoading,
-    addSeasonPlayer,
-    removeSeasonPlayer,
-    moveSeasonPlayer,
-    setCaptain,
+    batchEditRoster,
   } = usePublishedTeams(selectedSeasonId);
   const { matches, loading: matchesLoading } = useMatches(selectedSeasonId);
   const { gamesPlayedByPlayer } = useTeamStats(selectedSeasonId);
@@ -184,6 +181,7 @@ function LeaguePage() {
               <PlayerStatsView
                 season={season}
                 gamesPlayedByPlayer={gamesPlayedByPlayer}
+                batchEditRoster={batchEditRoster}
                 onBack={() => navigate('/league/standings')}
               />
             }
@@ -199,7 +197,7 @@ function LeaguePage() {
               <TeamRosterEditRoute
                 season={season}
                 seasonId={selectedSeasonId}
-                roster={{ addSeasonPlayer, removeSeasonPlayer, moveSeasonPlayer, setCaptain }}
+                roster={{ batchEditRoster }}
               />
             }
           />

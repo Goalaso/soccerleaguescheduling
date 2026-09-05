@@ -296,17 +296,50 @@
   margin-right: 0.3rem;
 }
 
+/* Overrides badge-count's (shared.css) and calendar-count's (below) default
+   tint — how many players a team actually needs to field a game (6) is a
+   real rule, not just a display preference, so these colors mean something
+   specific: red = below that, can't play yet; green = at or above it. Zero
+   stays unstyled (see attendanceTierClass in utils/season.js) since
+   "nobody's responded yet" isn't the same signal as "not enough responded".
+   Lives here rather than shared.css so it loads after both base classes it
+   needs to beat (see src/index.js's CSS import order) — same specificity,
+   later wins the tie. */
+.attendance-tier-ready {
+  background: rgba(34, 197, 94, 0.18);
+  color: var(--success-text);
+}
+
+.attendance-tier-short {
+  background: rgba(239, 68, 68, 0.18);
+  color: var(--danger-text);
+}
+
 .roster-manager-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 1.5rem;
   margin-top: 1rem;
+  align-items: stretch;
+}
+
+/* Grid items stretch to the row's height by default, but that alone only
+   grows the column's box — its content still stacks from the top, leaving
+   empty space below a team with fewer players/guests instead of moving its
+   add-row down to match the taller column. Flex-column + margin-top:auto
+   on .roster-manager-add-row below pushes it to fill that space instead,
+   so both teams' dropdowns land on the same bottom edge regardless of how
+   many rows either one has above it. */
+.roster-manager-team-col {
+  display: flex;
+  flex-direction: column;
 }
 
 .roster-manager-add-row {
   display: flex;
   gap: 0.5rem;
-  margin-top: 0.5rem;
+  margin-top: auto;
+  padding-top: 0.5rem;
 }
 
 .roster-manager-add-row .select-input {
@@ -472,20 +505,35 @@
   padding: 2.5rem;
 }
 
+/* Heading + date + checkmark, centered above the grid (text-align:center
+   already comes from .record-success on the ancestor) — kept as its own
+   block rather than folded into .record-success-message so it's not part
+   of the 3-column grid below, which is what lets that grid's left column
+   (the "still need a score" box) start flush with Final Score and the
+   buttons instead of being pushed down by this content. Since the grid's
+   three columns are equal width (see .record-success-grid), the panel's
+   horizontal center — where this header (and the checkmark in it) sits —
+   lands exactly on the middle column's center too, so the checkmark reads
+   as "above Final Score" without actually being inside that column. */
+.record-success-header .modal-title {
+  margin-bottom: 0.4rem;
+}
+
+.record-success-header .generated-subtitle {
+  margin-bottom: 1.5rem;
+}
+
 .record-success-icon {
-  margin: 0 auto 1.5rem;
+  margin: 0 auto;
 }
 
 .record-success-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr auto;
+  grid-template-columns: 1fr 1fr 1fr;
   gap: 1.5rem;
+  margin-top: 1.5rem;
   text-align: left;
   align-items: start;
-}
-
-.record-success-message .modal-title {
-  margin-bottom: 0.4rem;
 }
 
 .record-warning-box {
@@ -493,7 +541,6 @@
   border: 1px solid var(--warning-text);
   border-radius: 6px;
   padding: 0.9rem;
-  margin-top: 1rem;
   font-size: 0.8rem;
   color: var(--warning-text);
 }
@@ -501,6 +548,18 @@
 .record-warning-item {
   margin-top: 0.5rem;
   color: var(--text-soft);
+}
+
+.record-warning-item-clickable {
+  cursor: pointer;
+  border-radius: 4px;
+  margin-left: -0.4rem;
+  margin-right: -0.4rem;
+  padding: 0.2rem 0.4rem;
+}
+
+.record-warning-item-clickable:hover {
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .record-success-score-box {

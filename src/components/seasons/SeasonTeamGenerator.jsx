@@ -5,15 +5,10 @@ import PlayerTable from '../teamGenerator/PlayerTable';
 import EmptyTeamsState from '../teamGenerator/EmptyTeamsState';
 import GeneratedTeamsView from '../teamGenerator/GeneratedTeamsView';
 import PublishedModal from '../teamGenerator/PublishedModal';
-import NotifyPlayers from '../teamGenerator/NotifyPlayers';
-import SentModal from '../teamGenerator/SentModal';
 import { useSeason } from '../../hooks/useSeason';
 import { useSeasonAvailability } from '../../hooks/useSeasonAvailability';
 import { usePublishedTeams } from '../../hooks/usePublishedTeams';
 import { generateTeams, summarizeBalance, summarizeTeam } from '../../utils/generateTeams';
-
-const DEFAULT_MESSAGE =
-  "Hi {first_name}, your team for this season has been announced! You've been assigned to {team_name}. View your full team roster and schedule at the link below.";
 
 // Season-scoped adaptation of the original standalone team generator: same
 // options/generate/publish/notify screens, but the candidate player pool is
@@ -64,11 +59,7 @@ function SeasonTeamGenerator({ onPublished }) {
   const [teams, setTeams] = useState(null);
   const [isPublished, setIsPublished] = useState(false);
   const [modal, setModal] = useState(null);
-  const [sentStats, setSentStats] = useState(null);
   const [publishError, setPublishError] = useState(null);
-  const [deliveryMethods, setDeliveryMethods] = useState({ email: true, sms: true, app: false });
-  const [message, setMessage] = useState(DEFAULT_MESSAGE);
-  const [teamToggles, setTeamToggles] = useState({});
 
   const hydratedRef = useRef(false);
   useEffect(() => {
@@ -82,7 +73,6 @@ function SeasonTeamGenerator({ onPublished }) {
     if (savedTeams && savedTeams.length > 0) {
       setTeams(savedTeams);
       setIsPublished(true);
-      setTeamToggles(savedTeams.reduce((acc, t) => ({ ...acc, [t.id]: true }), {}));
       if (location.pathname === basePath) {
         navigate(`${basePath}/results`, { replace: true });
       }
@@ -104,7 +94,6 @@ function SeasonTeamGenerator({ onPublished }) {
   const handleGenerate = () => {
     const nextTeams = generateTeams(eligiblePlayers, fullOptions);
     setTeams(nextTeams);
-    setTeamToggles(nextTeams.reduce((acc, t) => ({ ...acc, [t.id]: true }), {}));
     setIsPublished(false);
     navigate(`${basePath}/results`);
   };
@@ -152,28 +141,6 @@ function SeasonTeamGenerator({ onPublished }) {
 
   const handleRenameTeam = (teamId, name) => {
     setTeams((prev) => prev.map((t) => (t.id === teamId ? { ...t, name } : t)));
-  };
-
-  const toggleDeliveryMethod = (method) => setDeliveryMethods((prev) => ({ ...prev, [method]: !prev[method] }));
-  const toggleTeam = (teamId) => setTeamToggles((prev) => ({ ...prev, [teamId]: !prev[teamId] }));
-
-  const handleSend = () => {
-    const activeTeams = teams.filter((t) => teamToggles[t.id]);
-    const activePlayers = activeTeams.flatMap((t) => t.players);
-    const emailCount = deliveryMethods.email ? activePlayers.length : 0;
-    const smsCount = deliveryMethods.sms ? activePlayers.filter((p) => p.hasPhone).length : 0;
-    const appCount = deliveryMethods.app ? activePlayers.filter((p) => p.hasApp).length : 0;
-
-    setSentStats({
-      players: activePlayers.length,
-      teams: activeTeams.length,
-      messages: emailCount + smsCount + appCount,
-      delivered: 100,
-      emailCount,
-      smsCount,
-      appCount,
-    });
-    setModal('sent');
   };
 
   const handleSaveAndPublish = async () => {
@@ -238,27 +205,6 @@ function SeasonTeamGenerator({ onPublished }) {
             }
           />
 
-          <Route
-            path="notify"
-            element={
-              teams ? (
-                <NotifyPlayers
-                  teams={teams}
-                  playerCount={playerCount}
-                  deliveryMethods={deliveryMethods}
-                  onToggleDeliveryMethod={toggleDeliveryMethod}
-                  message={message}
-                  onMessageChange={setMessage}
-                  teamToggles={teamToggles}
-                  onToggleTeam={toggleTeam}
-                  onBack={() => navigate(`${basePath}/results`)}
-                  onSend={handleSend}
-                />
-              ) : (
-                <Navigate to={basePath} replace />
-              )
-            }
-          />
         </Routes>
       )}
 
@@ -268,24 +214,6 @@ function SeasonTeamGenerator({ onPublished }) {
           playerCount={playerCount}
           avgSkill={balance.avgSkill}
           balanceLabel={balance.label}
-          onBackToHome={() => {
-            setModal(null);
-            navigate('/seasons');
-          }}
-          onNotify={() => {
-            setModal(null);
-            navigate(`${basePath}/notify`);
-          }}
-        />
-      )}
-
-      {modal === 'sent' && sentStats && (
-        <SentModal
-          stats={sentStats}
-          onViewTeams={() => {
-            setModal(null);
-            navigate(`${basePath}/results`);
-          }}
           onBackToHome={() => {
             setModal(null);
             navigate('/seasons');

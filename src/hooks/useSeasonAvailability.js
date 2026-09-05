@@ -18,6 +18,15 @@ export function useSeasonAvailability(seasonId) {
     },
   });
 
+  // Applies several players' availability changes in one request instead
+  // of one round trip per checkbox click.
+  const setAvailabilityBatchMutation = useMutation({
+    mutationFn: (changes) => apiPatch(`/seasons/${seasonId}/availability`, { changes }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['seasonAvailability', seasonId] });
+    },
+  });
+
   // Adds a player who has no availability row for this season at all yet
   // (e.g. joined the league after the season already started) — distinct
   // from setAvailability above, which only ever toggles an existing row.
@@ -30,7 +39,16 @@ export function useSeasonAvailability(seasonId) {
 
   const setAvailability = (playerId, isAvailable) =>
     setAvailabilityMutation.mutateAsync({ playerId, isAvailable });
+  const setAvailabilityBatch = (changes) => setAvailabilityBatchMutation.mutateAsync(changes);
   const addToSeason = (playerId) => addToSeasonMutation.mutateAsync(playerId);
 
-  return { players: data || [], loading: isLoading, error, refetch, setAvailability, addToSeason };
+  return {
+    players: data || [],
+    loading: isLoading,
+    error,
+    refetch,
+    setAvailability,
+    setAvailabilityBatch,
+    addToSeason,
+  };
 }

@@ -2,7 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useMatch } from '../../hooks/useMatch';
 import { useSeasonAvailability } from '../../hooks/useSeasonAvailability';
+import { usePendingChanges } from '../../hooks/usePendingChanges';
 import { formatMatchDate, isMatchOverdue, parseMatchDate } from '../../utils/season';
+import PendingChangesBanner from '../shared/PendingChangesBanner';
 
 const POSITION_ABBR = {
   Goalkeeper: 'GK',
@@ -66,10 +68,9 @@ function RosterColumn({ team, goalsByPlayer, onChange }) {
 // season. Works before the match (assigning subs) or after a score's
 // already recorded (in-game swap bookkeeping/correction) — it's just
 // "edit this match's roster," usable any time this screen is open.
-function RosterManager({ match, teams, seasonId, matches, addToRoster, removeFromRoster }) {
+function RosterManager({ match, teams, seasonId, matches, rosterPending }) {
   const [expanded, setExpanded] = useState(false);
   const [picks, setPicks] = useState({});
-  const [busy, setBusy] = useState(false);
   const { players: availability } = useSeasonAvailability(seasonId);
 
   if (!teams) return null;
@@ -78,6 +79,16 @@ function RosterManager({ match, teams, seasonId, matches, addToRoster, removeFro
   const rosteredIds = new Set(teams.flatMap((t) => t.players.map((p) => p.id)));
   const subPool = availability.filter((p) => p.isAvailable && !rosteredIds.has(p.playerId));
   const seasonAvailableIds = new Set(availability.filter((p) => p.isAvailable).map((p) => p.playerId));
+
+  // A pending guest add has no real match_rosters row yet, so it isn't in
+  // match.players — look its display name up from wherever it actually
+  // came from (the season-wide availability list for a sub, or another
+  // team's roster for a borrow) instead of carrying it in the pending
+  // change object itself.
+  const candidateName = (playerId, source) => {
+    if (source === 'sub') return availability.find((a) => a.playerId === playerId)?.name || 'Unknown player';
+    return teams.flatMap((t) => t.players).find((p) => p.id === playerId)?.name || 'Unknown player';
+  };
 
   // "Checked in today" count for a team not playing in this match — looked
   // up from its own match this same round (every match in a round plays
@@ -111,36 +122,33 @@ function RosterManager({ match, teams, seasonId, matches, addToRoster, removeFro
     return c.count != null ? `${c.name} (${c.teamName}, ${c.count})` : `${c.name} (${c.teamName})`;
   };
 
-  const handleToggleRegular = async (teamId, playerId, confirmed) => {
-    setBusy(true);
-    try {
-      if (confirmed) await removeFromRoster(playerId, teamId);
-      else await addToRoster(playerId, teamId, 'regular');
-    } finally {
-      setBusy(false);
+  // Stages instead of sending immediately — see usePendingChanges. Toggling
+  // a box back to its own server-confirmed value drops the pending entry
+  // entirely, so the banner's count only reflects real, sendable edits.
+  const handleToggleRegular = (teamId, playerId, currentlyChecked) => {
+    const key = `${playerId}:${teamId}`;
+    const nextChecked = !currentlyChecked;
+    const serverConfirmed = (teamId === match.home.id ? match.home : match.away).players.some(
+      (p) => p.id === playerId && p.confirmed
+    );
+    if (nextChecked === serverConfirmed) {
+      rosterPending.unstage(key);
+    } else {
+      rosterPending.stage(key, { playerId, teamId, action: nextChecked ? 'add' : 'remove', source: 'regular' });
     }
   };
 
-  const handleRemove = async (teamId, playerId) => {
-    setBusy(true);
-    try {
-      await removeFromRoster(playerId, teamId);
-    } finally {
-      setBusy(false);
-    }
+  const handleRemove = (teamId, playerId) => {
+    rosterPending.stage(`${playerId}:${teamId}`, { playerId, teamId, action: 'remove' });
   };
 
-  const handleAdd = async (team) => {
+  const handleAdd = (team) => {
     const pick = picks[team.id];
     if (!pick) return;
     const [source, playerIdStr] = pick.split(':');
-    setBusy(true);
-    try {
-      await addToRoster(Number(playerIdStr), team.id, source);
-      setPicks((prev) => ({ ...prev, [team.id]: '' }));
-    } finally {
-      setBusy(false);
-    }
+    const playerId = Number(playerIdStr);
+    rosterPending.stage(`${playerId}:${team.id}`, { playerId, teamId: team.id, action: 'add', source });
+    setPicks((prev) => ({ ...prev, [team.id]: '' }));
   };
 
   const renderTeam = (team) => {
@@ -149,9 +157,21 @@ function RosterManager({ match, teams, seasonId, matches, addToRoster, removeFro
     // to listing the whole season roster before anyone's touched this
     // match — that's so the team stays visible (e.g. to log a goal), not
     // because everyone's actually confirmed. p.confirmed distinguishes a
-    // real roll-call/add row from that fallback.
-    const confirmedIds = new Set(team.players.filter((p) => p.confirmed).map((p) => p.id));
-    const guests = team.players.filter((p) => p.source !== 'regular');
+    // real roll-call/add row from that fallback. Layer this team's pending,
+    // not-yet-sent changes on top of that server truth before computing
+    // anything else, so staged edits show up immediately.
+    const teamPending = Array.from(rosterPending.pending.values()).filter((c) => c.teamId === team.id);
+    const pendingRemovedIds = new Set(teamPending.filter((c) => c.action === 'remove').map((c) => c.playerId));
+    const pendingAdds = teamPending.filter((c) => c.action === 'add');
+    const pendingAddedRegularIds = new Set(pendingAdds.filter((c) => c.source === 'regular').map((c) => c.playerId));
+    const pendingAddedGuests = pendingAdds.filter((c) => c.source !== 'regular');
+
+    const confirmedIds = new Set(
+      team.players.filter((p) => p.confirmed && !pendingRemovedIds.has(p.id)).map((p) => p.id)
+    );
+    pendingAddedRegularIds.forEach((pid) => confirmedIds.add(pid));
+
+    const guests = team.players.filter((p) => p.source !== 'regular' && !pendingRemovedIds.has(p.id));
 
     const borrowable = teams
       .filter((t) => t.id !== team.id)
@@ -176,10 +196,19 @@ function RosterManager({ match, teams, seasonId, matches, addToRoster, removeFro
       })
       .filter((p) => !confirmedIds.has(p.id));
 
+    // Anyone with a pending add anywhere (this team's guest slot, or any
+    // team's regular checkbox) shouldn't also show as an addable candidate
+    // — avoids staging the same player onto a roster twice before confirm.
+    const allPendingAddedIds = new Set(
+      Array.from(rosterPending.pending.values())
+        .filter((c) => c.action === 'add')
+        .map((c) => c.playerId)
+    );
+
     const candidates = [
       ...subPool.map((p) => ({ id: p.playerId, name: p.name, source: 'sub' })),
       ...borrowable.map((p) => ({ id: p.id, name: p.name, source: 'borrowed', teamName: p.teamName, count: p.count })),
-    ];
+    ].filter((c) => !allPendingAddedIds.has(c.id));
 
     // Season-roster players currently loaned to another team this round
     // (this match's opponent, or a completely different match) — checking
@@ -188,14 +217,14 @@ function RosterManager({ match, teams, seasonId, matches, addToRoster, removeFro
     const loanedOut = team.loanedOut || {};
 
     return (
-      <div>
+      <div className="roster-manager-team-col">
         <span className="option-label">{team.name}</span>
         {fullRoster.map((p) => (
           <label className="checkbox-row" key={p.id}>
             <input
               type="checkbox"
               checked={confirmedIds.has(p.id)}
-              disabled={busy || !!loanedOut[p.id]}
+              disabled={!!loanedOut[p.id]}
               onChange={() => handleToggleRegular(team.id, p.id, confirmedIds.has(p.id))}
             />
             <span>
@@ -221,6 +250,21 @@ function RosterManager({ match, teams, seasonId, matches, addToRoster, removeFro
             </button>
           </div>
         ))}
+        {pendingAddedGuests.map((c) => (
+          <div className="checkbox-row" key={`pending-${c.playerId}`}>
+            <span>
+              {candidateName(c.playerId, c.source)}{' '}
+              <span className="roster-source-badge">{c.source.toUpperCase()} · PENDING</span>
+            </span>
+            <button
+              type="button"
+              className="link-btn link-btn-danger"
+              onClick={() => rosterPending.unstage(`${c.playerId}:${team.id}`)}
+            >
+              Undo
+            </button>
+          </div>
+        ))}
         <div className="roster-manager-add-row">
           <select
             className="select-input"
@@ -234,7 +278,7 @@ function RosterManager({ match, teams, seasonId, matches, addToRoster, removeFro
               </option>
             ))}
           </select>
-          <button type="button" className="outline-btn" disabled={busy || !picks[team.id]} onClick={() => handleAdd(team)}>
+          <button type="button" className="outline-btn" disabled={!picks[team.id]} onClick={() => handleAdd(team)}>
             Add
           </button>
         </div>
@@ -301,13 +345,46 @@ function CaptainReportedScores({ match, onUse }) {
 function RecordResultsView({ matches, teams, seasonId, onResultsSaved }) {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { match, loading, submitResults, addToRoster, removeFromRoster } = useMatch(id);
+  const { match, loading, submitResults, submitRosterBatch } = useMatch(id);
+  const rosterPending = usePendingChanges();
+  const [confirmingRoster, setConfirmingRoster] = useState(false);
+  const [rosterError, setRosterError] = useState(null);
 
   const [homeGoalsByPlayer, setHomeGoalsByPlayer] = useState({});
   const [awayGoalsByPlayer, setAwayGoalsByPlayer] = useState({});
   const [error, setError] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [saved, setSaved] = useState(null);
+
+  // Clicking into a different match (from the "still need a score" list, or
+  // "Record Another Game") changes the :id route param but re-renders this
+  // same component instance — React Router doesn't remount just because a
+  // param changed. Without this, every piece of local per-match state below
+  // would carry over from whichever match was open before — most visibly
+  // `saved`, which would keep showing the previous match's "Results Saved!"
+  // screen instead of the new match's entry form.
+  useEffect(() => {
+    setSaved(null);
+    setError(null);
+    setSubmitting(false);
+    setRosterError(null);
+    setConfirmingRoster(false);
+    rosterPending.clear();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+
+  const handleConfirmRoster = async () => {
+    setRosterError(null);
+    setConfirmingRoster(true);
+    try {
+      await submitRosterBatch(Array.from(rosterPending.pending.values()));
+      rosterPending.clear();
+    } catch (err) {
+      setRosterError(err.message);
+    } finally {
+      setConfirmingRoster(false);
+    }
+  };
 
   useEffect(() => {
     if (!match) return;
@@ -370,26 +447,27 @@ function RecordResultsView({ matches, teams, seasonId, onResultsSaved }) {
     return (
       <div className="record-success">
         <div className="panel record-success-panel">
-          <div className="modal-check-icon record-success-icon">
-            <svg viewBox="0 0 24 24" width="30" height="30" fill="none">
-              <path
-                d="M5 13l4 4L19 7"
-                stroke="#22c55e"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          </div>
-
-          <div className="record-success-grid">
-          <div className="record-success-message">
+          <div className="record-success-header">
             <h3 className="modal-title">Results Saved!</h3>
             <p className="generated-subtitle">
               {fullDate(parseMatchDate(match.matchDate))} · {shortName(match.home.name)} vs{' '}
               {shortName(match.away.name)}
             </p>
+            <div className="modal-check-icon record-success-icon">
+              <svg viewBox="0 0 24 24" width="30" height="30" fill="none">
+                <path
+                  d="M5 13l4 4L19 7"
+                  stroke="#22c55e"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </div>
+          </div>
 
+          <div className="record-success-grid">
+          <div className="record-success-message">
             {otherPending.length > 0 && (
               <div className="record-warning-box">
                 <p>
@@ -397,7 +475,11 @@ function RecordResultsView({ matches, teams, seasonId, onResultsSaved }) {
                   {otherPending.length === 1 ? 's' : ''} a score
                 </p>
                 {otherPending.slice(0, 3).map((m) => (
-                  <p key={m.id} className="record-warning-item">
+                  <p
+                    key={m.id}
+                    className="record-warning-item record-warning-item-clickable"
+                    onClick={() => navigate(`/schedule/match/${m.id}`)}
+                  >
                     Mon · {formatMatchDate(parseMatchDate(m.matchDate))} — {shortName(m.home.name)} vs{' '}
                     {shortName(m.away.name)}
                     <br />
@@ -495,14 +577,15 @@ function RecordResultsView({ matches, teams, seasonId, onResultsSaved }) {
         <span className="record-score-team record-score-team-right">{match.away.name}</span>
       </div>
 
-      <RosterManager
-        match={match}
-        teams={teams}
-        seasonId={seasonId}
-        matches={matches}
-        addToRoster={addToRoster}
-        removeFromRoster={removeFromRoster}
+      <PendingChangesBanner
+        count={rosterPending.count}
+        onConfirm={handleConfirmRoster}
+        confirming={confirmingRoster}
+        error={rosterError}
+        label="Confirm roster changes"
       />
+
+      <RosterManager match={match} teams={teams} seasonId={seasonId} matches={matches} rosterPending={rosterPending} />
 
       <div className="record-roster-grid">
         <RosterColumn

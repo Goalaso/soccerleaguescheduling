@@ -166,3 +166,16 @@ export function isMatchOverdue(match) {
   today.setHours(0, 0, 0, 0);
   return matchDate <= today;
 }
+
+// Fewest players a team can field and still play the game.
+export const MIN_PLAYERS_TO_PLAY = 6;
+
+// Shared by GameDayView's roll-call badge and CalendarView's per-team match
+// list count — color-codes a team's confirmed-today count by whether it's
+// actually enough to play. No pending/staged state involved here, just a
+// className, so both sites just interpolate this straight into their
+// existing badge/count element rather than needing their own copy of the
+// threshold.
+export function attendanceTierClass(count) {
+  return count >= MIN_PLAYERS_TO_PLAY ? 'attendance-tier-ready' : 'attendance-tier-short';
+}

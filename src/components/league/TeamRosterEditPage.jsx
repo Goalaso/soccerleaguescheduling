@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { useSeasonAvailability } from '../../hooks/useSeasonAvailability';
 import { usePlayers } from '../../hooks/usePlayers';
+import { usePendingChanges } from '../../hooks/usePendingChanges';
 import TeamRosterCard from './TeamRosterCard';
 import SeasonSubPoolCard from './SeasonSubPoolCard';
+import PendingChangesBanner from '../shared/PendingChangesBanner';
 
 // Admin-only, permanent season-long roster changes — distinct from the
 // per-match loans on the schedule/record-results screens. Moving a player
@@ -11,9 +13,13 @@ import SeasonSubPoolCard from './SeasonSubPoolCard';
 // Laid out like the team generator's card grid (a card for this team, a
 // card for who could be added to it) rather than plain list rows, for the
 // same at-a-glance position/skill visibility that screen has.
-function TeamRosterEditPage({ team, allTeams, seasonId, onBack, addSeasonPlayer, removeSeasonPlayer, moveSeasonPlayer, setCaptain }) {
-  const [busy, setBusy] = useState(false);
+function TeamRosterEditPage({ team, allTeams, seasonId, onBack, batchEditRoster }) {
   const [newSeasonPick, setNewSeasonPick] = useState('');
+  const [addingToSeason, setAddingToSeason] = useState(false);
+  const [pendingCaptainId, setPendingCaptainId] = useState(undefined); // undefined = no staged change
+  const [confirming, setConfirming] = useState(false);
+  const [rosterError, setRosterError] = useState(null);
+  const rosterPending = usePendingChanges();
   const { players: availability, addToSeason } = useSeasonAvailability(seasonId);
   const { players: allPlayers } = usePlayers();
 
@@ -28,28 +34,96 @@ function TeamRosterEditPage({ team, allTeams, seasonId, onBack, addSeasonPlayer,
   const availabilityIds = new Set(availability.map((p) => p.playerId));
   const newSeasonPool = allPlayers.filter((p) => !availabilityIds.has(p.id) && !rosteredIds.has(p.id));
 
-  const withBusy = async (fn) => {
-    setBusy(true);
-    try {
-      await fn();
-    } finally {
-      setBusy(false);
-    }
+  const pendingEntries = Array.from(rosterPending.pending.values());
+  const removedOrMovedOutIds = new Set(
+    pendingEntries.filter((c) => c.action === 'remove' || c.action === 'move').map((c) => c.playerId)
+  );
+  const pendingAdds = pendingEntries.filter((c) => c.action === 'add');
+  const pendingAddedIds = new Set(pendingAdds.map((c) => c.playerId));
+
+  // A pending add has no team_players row yet, so it isn't in team.players
+  // — look its full details up from wherever it actually came from (the
+  // sub pool) instead of carrying them in the pending change object itself.
+  const findPlayerInfo = (playerId) => {
+    const fromPool = subPool.find((p) => p.playerId === playerId);
+    if (!fromPool) return null;
+    return { id: fromPool.playerId, name: fromPool.name, position: fromPool.position, skill: fromPool.skill };
   };
+
+  // This team's roster with staged-but-unsent moves/removes/adds already
+  // applied, so the card reflects what a confirm would actually produce
+  // instead of stale server data.
+  const effectiveTeam = {
+    ...team,
+    players: [
+      ...team.players.filter((p) => !removedOrMovedOutIds.has(p.id)),
+      ...pendingAdds.map((c) => findPlayerInfo(c.playerId)).filter(Boolean),
+    ],
+  };
+  const effectiveSubPool = subPool.filter((p) => !pendingAddedIds.has(p.playerId));
+
+  const effectiveCaptainId = pendingCaptainId !== undefined ? pendingCaptainId : team.captainPlayerId;
+  const totalPendingCount = rosterPending.count + (pendingCaptainId !== undefined ? 1 : 0);
 
   const handleMove = (playerId, toTeamId) => {
     if (!toTeamId) return;
-    withBusy(() => moveSeasonPlayer(team.id, playerId, Number(toTeamId)));
+    rosterPending.stage(playerId, { playerId, action: 'move', teamId: team.id, toTeamId: Number(toTeamId) });
   };
-  const handleRemove = (playerId) => withBusy(() => removeSeasonPlayer(team.id, playerId));
-  const handleAdd = (playerId) => withBusy(() => addSeasonPlayer(team.id, playerId));
-  const handleAddToSeason = () => {
-    if (!newSeasonPick) return;
-    withBusy(() => addToSeason(Number(newSeasonPick))).then(() => setNewSeasonPick(''));
+  const handleRemove = (playerId) => {
+    rosterPending.stage(playerId, { playerId, action: 'remove', teamId: team.id });
+  };
+  const handleAdd = (playerId) => {
+    rosterPending.stage(playerId, { playerId, action: 'add', teamId: team.id });
   };
   const handleCaptain = (e) => {
     const val = e.target.value;
-    withBusy(() => setCaptain(team.id, val ? Number(val) : null));
+    const next = val ? Number(val) : null;
+    if (next === team.captainPlayerId) {
+      setPendingCaptainId(undefined);
+    } else {
+      setPendingCaptainId(next);
+    }
+  };
+
+  const pendingLabel = (c) => {
+    if (c.action === 'add') return `Add ${findPlayerInfo(c.playerId)?.name || 'player'}`;
+    const player = team.players.find((p) => p.id === c.playerId);
+    if (c.action === 'remove') return `Remove ${player?.name || 'player'}`;
+    const toTeam = otherTeams.find((t) => t.id === c.toTeamId);
+    return `Move ${player?.name || 'player'} to ${toTeam?.name || 'another team'}`;
+  };
+
+  const handleConfirmRoster = async () => {
+    setRosterError(null);
+    setConfirming(true);
+    try {
+      await batchEditRoster({
+        operations: pendingEntries.map((c) =>
+          c.action === 'move'
+            ? { action: 'move', playerId: c.playerId, teamId: c.teamId, toTeamId: c.toTeamId }
+            : { action: c.action, playerId: c.playerId, teamId: c.teamId }
+        ),
+        captainPlayerId: pendingCaptainId,
+        captainTeamId: pendingCaptainId !== undefined ? team.id : undefined,
+      });
+      rosterPending.clear();
+      setPendingCaptainId(undefined);
+    } catch (err) {
+      setRosterError(err.message);
+    } finally {
+      setConfirming(false);
+    }
+  };
+
+  const handleAddToSeason = async () => {
+    if (!newSeasonPick) return;
+    setAddingToSeason(true);
+    try {
+      await addToSeason(Number(newSeasonPick));
+      setNewSeasonPick('');
+    } finally {
+      setAddingToSeason(false);
+    }
   };
 
   return (
@@ -65,14 +139,9 @@ function TeamRosterEditPage({ team, allTeams, seasonId, onBack, addSeasonPlayer,
       <div className="panel team-roster-editor-panel">
         <div className="option-group">
           <span className="option-label">Team Captain</span>
-          <select
-            className="select-input"
-            value={team.captainPlayerId || ''}
-            disabled={busy}
-            onChange={handleCaptain}
-          >
+          <select className="select-input" value={effectiveCaptainId || ''} onChange={handleCaptain}>
             <option value="">No captain assigned</option>
-            {team.players.map((p) => (
+            {effectiveTeam.players.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}
               </option>
@@ -81,9 +150,34 @@ function TeamRosterEditPage({ team, allTeams, seasonId, onBack, addSeasonPlayer,
         </div>
       </div>
 
+      <PendingChangesBanner
+        count={totalPendingCount}
+        onConfirm={handleConfirmRoster}
+        confirming={confirming}
+        error={rosterError}
+        label="Confirm roster changes"
+      />
+
+      {pendingEntries.length > 0 && (
+        <div className="panel pending-roster-list">
+          {pendingEntries.map((c) => (
+            <div className="checkbox-row" key={c.playerId}>
+              <span>{pendingLabel(c)}</span>
+              <button
+                type="button"
+                className="link-btn link-btn-danger"
+                onClick={() => rosterPending.unstage(c.playerId)}
+              >
+                Undo
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div className="team-grid">
-        <TeamRosterCard team={team} otherTeams={otherTeams} busy={busy} onMove={handleMove} onRemove={handleRemove} />
-        <SeasonSubPoolCard players={subPool} busy={busy} onAdd={handleAdd} />
+        <TeamRosterCard team={effectiveTeam} otherTeams={otherTeams} busy={confirming} onMove={handleMove} onRemove={handleRemove} />
+        <SeasonSubPoolCard players={effectiveSubPool} busy={confirming} onAdd={handleAdd} />
       </div>
 
       <div className="panel roster-add-to-season-panel">
@@ -104,7 +198,7 @@ function TeamRosterEditPage({ team, allTeams, seasonId, onBack, addSeasonPlayer,
           <button
             type="button"
             className="outline-btn"
-            disabled={busy || !newSeasonPick}
+            disabled={addingToSeason || !newSeasonPick}
             onClick={handleAddToSeason}
           >
             Add to Season

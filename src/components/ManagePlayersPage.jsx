@@ -25,7 +25,7 @@ function ManagePlayersPage() {
           <Route
             index
             element={
-              <PlayerListView players={players} loading={loading} deletePlayer={deletePlayer} />
+              <PlayerListView players={players} loading={loading} deletePlayer={deletePlayer} leagues={leagues} />
             }
           />
           <Route

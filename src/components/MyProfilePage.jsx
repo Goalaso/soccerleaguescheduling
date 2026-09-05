@@ -26,20 +26,13 @@ function AccountSettingsPanel() {
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  // Local until "Update Account" is pressed, same as every other field in
+  // this form — was previously its own checkbox that saved on every click.
+  const [emailNotificationsEnabled, setEmailNotificationsEnabled] = useState(!!user?.emailNotificationsEnabled);
   const [error, setError] = useState(null);
   const [saved, setSaved] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
-  const [prefBusy, setPrefBusy] = useState(false);
-
-  const handleToggleEmailNotifications = async () => {
-    setPrefBusy(true);
-    try {
-      await updatePreferences({ emailNotificationsEnabled: !user.emailNotificationsEnabled });
-    } finally {
-      setPrefBusy(false);
-    }
-  };
 
   const handleDeleteAccount = async (password) => {
     await deleteAccount(password);
@@ -51,7 +44,14 @@ function AccountSettingsPanel() {
     setError(null);
     setSaved(false);
 
-    if (!currentPassword) {
+    const emailChanged = email !== user.email;
+    const notificationsChanged = emailNotificationsEnabled !== !!user.emailNotificationsEnabled;
+    // Current password is only required for the sensitive fields (email,
+    // password) — a notification-preference-only change shouldn't need it,
+    // same as it never did when that checkbox saved on its own.
+    const sensitiveChange = emailChanged || !!newPassword;
+
+    if (sensitiveChange && !currentPassword) {
       setError('Enter your current password to save changes.');
       return;
     }
@@ -63,20 +63,23 @@ function AccountSettingsPanel() {
       setError('New password must be at least 8 characters.');
       return;
     }
-
-    const emailChanged = email !== user.email;
-    if (!emailChanged && !newPassword) {
-      setError('Change your email or enter a new password before saving.');
+    if (!sensitiveChange && !notificationsChanged) {
+      setError('Change something before saving.');
       return;
     }
 
     setSubmitting(true);
     try {
-      await updateAccount({
-        email: emailChanged ? email : undefined,
-        password: newPassword || undefined,
-        currentPassword,
-      });
+      if (sensitiveChange) {
+        await updateAccount({
+          email: emailChanged ? email : undefined,
+          password: newPassword || undefined,
+          currentPassword,
+        });
+      }
+      if (notificationsChanged) {
+        await updatePreferences({ emailNotificationsEnabled });
+      }
       setSaved(true);
       setCurrentPassword('');
       setNewPassword('');
@@ -136,6 +139,17 @@ function AccountSettingsPanel() {
           />
         </div>
 
+        <label className="checkbox-row">
+          <input
+            type="checkbox"
+            checked={emailNotificationsEnabled}
+            onChange={(e) => setEmailNotificationsEnabled(e.target.checked)}
+          />
+          <span>
+            <span className="checkbox-title">Email me important notifications</span>
+          </span>
+        </label>
+
         {error && <p className="options-warning">{error}</p>}
         {saved && !error && <p className="save-confirmation">Saved!</p>}
 
@@ -143,18 +157,6 @@ function AccountSettingsPanel() {
           {submitting ? 'Saving...' : 'Update Account'}
         </button>
       </form>
-
-      <label className="checkbox-row">
-        <input
-          type="checkbox"
-          checked={!!user?.emailNotificationsEnabled}
-          disabled={prefBusy}
-          onChange={handleToggleEmailNotifications}
-        />
-        <span>
-          <span className="checkbox-title">Email me important notifications</span>
-        </span>
-      </label>
 
       {user?.role === 'player' && (
         <div className="danger-zone">

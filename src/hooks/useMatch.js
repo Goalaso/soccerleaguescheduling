@@ -42,6 +42,14 @@ export function useMatch(matchId) {
     onSuccess: applyRosterUpdate,
   });
 
+  // Applies several staged add/remove operations in one request instead of
+  // one round trip per checkbox click — see usePendingChanges for how
+  // callers accumulate `operations` before calling this.
+  const rosterBatchMutation = useMutation({
+    mutationFn: (operations) => apiPost(`/matches/${matchId}/roster/batch`, { operations }),
+    onSuccess: applyRosterUpdate,
+  });
+
   // Captain-reported proposal — never writes the official result itself,
   // just lands in match.scoreSubmissions for the admin to review/prefill from.
   const submitCaptainScoreMutation = useMutation({
@@ -53,6 +61,7 @@ export function useMatch(matchId) {
   const addToRoster = (playerId, teamId, source) => addRosterMutation.mutateAsync({ playerId, teamId, source });
   const removeFromRoster = (playerId, teamId) => removeRosterMutation.mutateAsync({ playerId, teamId });
   const submitCaptainScore = (payload) => submitCaptainScoreMutation.mutateAsync(payload);
+  const submitRosterBatch = (operations) => rosterBatchMutation.mutateAsync(operations);
 
   return {
     match: data ?? null,
@@ -63,5 +72,6 @@ export function useMatch(matchId) {
     addToRoster,
     removeFromRoster,
     submitCaptainScore,
+    submitRosterBatch,
   };
 }

@@ -5,6 +5,7 @@ const {
   recordResults,
   addRosterEntry,
   removeRosterEntry,
+  batchRosterEntries,
   submitCaptainScore,
 } = require('../controllers/matches.controller');
 const { requireAuth, requireRole } = require('../middleware/auth');
@@ -19,6 +20,9 @@ router.post('/:id/results', requireAuth, requireRole('admin'), recordResults);
 // controller since it depends on which team is being touched.
 router.post('/:id/roster', requireAuth, addRosterEntry);
 router.delete('/:id/roster/:playerId', requireAuth, removeRosterEntry);
+// One request applying several add/remove operations at once (see
+// batchRosterEntries) — same permission split as the two routes above.
+router.post('/:id/roster/batch', requireAuth, batchRosterEntries);
 // Captain-only in practice (checked inside the controller) — a proposal
 // that only ever prefills the admin's recordResults form, never writes
 // the official result itself.

@@ -80,6 +80,25 @@
   grid-template-columns: 0.4fr 1.3fr 0.8fr 0.5fr 1.3fr 1.5fr;
 }
 
+/* Overrides shared.css's `.player-table-row > *` truncation rule
+   (overflow:hidden/white-space:nowrap/min-width:0) for this one column —
+   that rule is meant for single-line text cells (name, position), but this
+   cell holds a fixed-size checkbox plus a variable number of badges
+   (Pending, Waitlisted). Forcing it into nowrap/hidden inline flow let the
+   badges' width push the checkbox around and clip inconsistently instead
+   of just wrapping to a second line, which read as the row's height
+   randomly changing. Two classes on this selector outweigh the shared
+   rule's one, so this wins regardless of stylesheet order. */
+.availability-review-row .availability-cell {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  overflow: visible;
+  white-space: normal;
+  min-width: 0;
+}
+
 /* Fill the rest of the viewport instead of a short fixed-height box that
    cuts off after a handful of rows — same pattern .manage-players-panel
    already uses. The header (title/button/column labels) stays put; only

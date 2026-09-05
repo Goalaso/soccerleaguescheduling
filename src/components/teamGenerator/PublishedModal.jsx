@@ -1,7 +1,7 @@
 import React from 'react';
 import Modal from '../Modal';
 
-function PublishedModal({ teamCount, playerCount, avgSkill, balanceLabel, onBackToHome, onNotify }) {
+function PublishedModal({ teamCount, playerCount, avgSkill, balanceLabel, onBackToHome }) {
   return (
     <Modal onClose={onBackToHome}>
       <span className="modal-status-badge status-published">● Published</span>
@@ -33,11 +33,8 @@ function PublishedModal({ teamCount, playerCount, avgSkill, balanceLabel, onBack
       </div>
 
       <div className="modal-actions">
-        <button className="outline-btn" onClick={onBackToHome}>
+        <button className="pill-btn pill-btn-blue full-width" onClick={onBackToHome}>
           Back to Home
-        </button>
-        <button className="pill-btn pill-btn-blue" onClick={onNotify}>
-          Notify Players
         </button>
       </div>
     </Modal>

@@ -194,6 +194,20 @@
   font-size: 0.85rem;
 }
 
+/* Season-long roster editor's row (TeamRosterCard) — like
+   .unassigned-player-row, but the last column holds both a "Move to..."
+   dropdown and a remove button instead of just one control, so it gets its
+   own slightly narrower actions track. Previously reused .team-player-row
+   (a 3-column template: name/position/actions) with no skill column at
+   all — the position badge, as the only fr track besides name, stretched
+   to fill the leftover space meant for skill, reading as an oddly wide
+   badge with no skill shown anywhere. */
+.team-roster-row {
+  grid-template-columns: 1.2fr 0.8fr 0.9fr 1.2fr;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+}
+
 .unassigned-player-row .select-input {
   padding: 0.3rem 0.5rem;
   font-size: 0.75rem;
@@ -270,6 +284,10 @@
 .delivery-card-title {
   font-weight: 600;
   font-size: 0.9rem;
+  /* Native <button> elements don't reliably inherit the surrounding white
+     text color across browsers (some fall back to a UA default like
+     buttontext) — set explicitly rather than relying on inheritance. */
+  color: white;
 }
 
 .delivery-card-sub {

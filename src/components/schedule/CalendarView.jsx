@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { formatMatchDate, isMatchOverdue, parseMatchDate } from '../../utils/season';
+import { formatMatchDate, isMatchOverdue, parseMatchDate, attendanceTierClass } from '../../utils/season';
 
 const DAY_LABELS = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
 
@@ -28,8 +28,13 @@ function matchConfirmedTotal(match) {
 function Matchup({ match }) {
   return (
     <>
-      <span className="calendar-count">{match.home.confirmedCount}</span> {shortName(match.home.name)} vs{' '}
-      {shortName(match.away.name)} <span className="calendar-count">{match.away.confirmedCount}</span>
+      <span className={`calendar-count ${attendanceTierClass(match.home.confirmedCount)}`}>
+        {match.home.confirmedCount}
+      </span>{' '}
+      {shortName(match.home.name)} vs {shortName(match.away.name)}{' '}
+      <span className={`calendar-count ${attendanceTierClass(match.away.confirmedCount)}`}>
+        {match.away.confirmedCount}
+      </span>
     </>
   );
 }
@@ -215,7 +220,7 @@ function CalendarView({ matches, showAll, filterTeamId, onSelectMatch }) {
                   <span className="calendar-day-number">
                     {day}
                     {dayMatches.length > 0 && (
-                      <span className="calendar-day-tally">{dayTotals[dayKey]} confirmed</span>
+                      <span className="calendar-day-tally">{dayTotals[dayKey]} total players confirmed</span>
                     )}
                   </span>
                 )}

@@ -8,6 +8,12 @@ const POSITION_CLASS = {
   Goalkeeper: 'badge-goalkeeper',
 };
 
+function skillBarClass(skill) {
+  if (skill >= 7) return 'skill-bar-high';
+  if (skill >= 5) return 'skill-bar-mid';
+  return 'skill-bar-low';
+}
+
 // Same team-card-v2 look as the team generator's TeamCard, adapted for a
 // permanent, already-published team: no rename (that's not a wired-up
 // action here), always in "editing" layout since this whole page exists to
@@ -43,9 +49,18 @@ function TeamRosterCard({ team, otherTeams, busy, onMove, onRemove }) {
 
       <div className="team-player-list">
         {team.players.map((p) => (
-          <div className="team-player-row" key={p.id}>
+          <div className="team-roster-row" key={p.id}>
             <span className="player-name">{p.name}</span>
             <span className={`badge ${POSITION_CLASS[p.position]}`}>{p.position}</span>
+            <span className="skill-cell">
+              <span className="skill-number">{p.skill}</span>
+              <span className="skill-bar-track">
+                <span
+                  className={`skill-bar-fill ${skillBarClass(p.skill)}`}
+                  style={{ width: `${p.skill * 10}%` }}
+                />
+              </span>
+            </span>
             <div className="team-player-edit-actions">
               <select
                 className="select-input"

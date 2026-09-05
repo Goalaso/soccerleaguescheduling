@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useMatch } from '../../hooks/useMatch';
+import { usePendingChanges } from '../../hooks/usePendingChanges';
 import { useAuth } from '../../context/AuthContext';
-import { formatMatchDate, parseMatchDate, isMatchOverdue } from '../../utils/season';
+import { formatMatchDate, parseMatchDate, isMatchOverdue, attendanceTierClass } from '../../utils/season';
+import PendingChangesBanner from '../shared/PendingChangesBanner';
 
 const POSITION_ABBR = {
   Goalkeeper: 'GK',
@@ -30,7 +32,13 @@ function fullDate(date) {
 // carries a server-computed `loanedOut` map (playerId -> their current
 // team's name) covering both cases, since the "different match entirely"
 // case has no other trace in this match's own data at all.
-function buildRosterRows(fullRoster, matchPlayers, team) {
+// `pending` (a usePendingChanges instance, keyed `${playerId}:${teamId}`)
+// layers staged-but-unsent attendance toggles on top of the server's real
+// roster — `confirmed` stays the true server value (goal-stepper gating
+// deliberately keeps reading that, not the staged value — see the plan's
+// "two separate steps" decision), while `checked` is what the checkbox
+// itself displays, pending-over-server.
+function buildRosterRows(fullRoster, matchPlayers, team, pending) {
   // matchPlayers is the match's *effective* roster, which still includes a
   // fallback listing of the whole season roster before anyone's touched
   // this match at all — that fallback is there so the team is still visible
@@ -41,16 +49,21 @@ function buildRosterRows(fullRoster, matchPlayers, team) {
   const fullIds = new Set((fullRoster || []).map((p) => p.id));
   const loanedOut = team.loanedOut || {};
 
-  const regularRows = (fullRoster || []).map((p) => ({
-    ...p,
-    source: 'regular',
-    confirmed: confirmedIds.has(p.id),
-    loanedToTeamName: loanedOut[p.id] || null,
-  }));
+  const regularRows = (fullRoster || []).map((p) => {
+    const confirmed = confirmedIds.has(p.id);
+    const staged = pending?.get(`${p.id}:${team.id}`);
+    return {
+      ...p,
+      source: 'regular',
+      confirmed,
+      checked: staged ? staged.action === 'add' : confirmed,
+      loanedToTeamName: loanedOut[p.id] || null,
+    };
+  });
 
   const guestRows = matchPlayers
     .filter((p) => p.source !== 'regular' && !fullIds.has(p.id))
-    .map((p) => ({ ...p, confirmed: true, loanedToTeamName: null }));
+    .map((p) => ({ ...p, confirmed: true, checked: true, loanedToTeamName: null }));
 
   return [...regularRows, ...guestRows];
 }
@@ -59,12 +72,12 @@ function buildRosterRows(fullRoster, matchPlayers, team) {
 // (pre-game roll call — checkbox only) | 'scoring' (post-game, this
 // viewer's own team — checkbox + goal steppers combined in one row, same
 // shape as the admin's RecordResultsView roster rows).
-function RosterColumn({ team, fullRoster, isMyTeam, scorers, mode, onToggle, toggling, goalsByPlayer, onGoalChange }) {
+function RosterColumn({ team, fullRoster, isMyTeam, scorers, mode, onToggle, pending, goalsByPlayer, onGoalChange }) {
   const recordedGoals = (scorers || [])
     .filter((s) => s.teamId === team.id)
     .reduce((acc, s) => ({ ...acc, [s.playerId]: s.goals }), {});
 
-  const rows = buildRosterRows(fullRoster, team.players, team);
+  const rows = buildRosterRows(fullRoster, team.players, team, pending);
   const confirmedCount = rows.filter((r) => r.confirmed).length;
 
   return (
@@ -75,7 +88,7 @@ function RosterColumn({ team, fullRoster, isMyTeam, scorers, mode, onToggle, tog
           {isMyTeam && <span className="badge badge-count gameday-mine-badge">Your Team</span>}
         </span>
         {mode !== 'readonly' && (
-          <span className="badge badge-count">
+          <span className={`badge badge-count ${attendanceTierClass(confirmedCount)}`}>
             {confirmedCount} of {rows.length} confirmed
           </span>
         )}
@@ -89,9 +102,9 @@ function RosterColumn({ team, fullRoster, isMyTeam, scorers, mode, onToggle, tog
               <input
                 type="checkbox"
                 className="attendance-checkbox"
-                checked={p.confirmed}
-                disabled={toggling || !!p.loanedToTeamName}
-                onChange={() => onToggle(p.id, p.confirmed)}
+                checked={p.checked}
+                disabled={!!p.loanedToTeamName}
+                onChange={() => onToggle(p.id, p.checked)}
                 aria-label={`${p.name} attending`}
               />
               <span className="record-player-name">
@@ -146,9 +159,9 @@ function RosterColumn({ team, fullRoster, isMyTeam, scorers, mode, onToggle, tog
               <input
                 type="checkbox"
                 className="attendance-checkbox"
-                checked={p.confirmed}
-                disabled={toggling || !!p.loanedToTeamName}
-                onChange={() => onToggle(p.id, p.confirmed)}
+                checked={p.checked}
+                disabled={!!p.loanedToTeamName}
+                onChange={() => onToggle(p.id, p.checked)}
                 aria-label={`${p.name} attending`}
               />
             ) : (
@@ -171,8 +184,10 @@ function GameDayView({ myTeamId, teams }) {
   const { id } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { match, loading, addToRoster, removeFromRoster, submitCaptainScore } = useMatch(id);
-  const [toggling, setToggling] = useState(false);
+  const { match, loading, submitRosterBatch, submitCaptainScore } = useMatch(id);
+  const attendancePending = usePendingChanges();
+  const [confirmingAttendance, setConfirmingAttendance] = useState(false);
+  const [attendanceError, setAttendanceError] = useState(null);
   const [goalsByPlayer, setGoalsByPlayer] = useState({});
   const [otherGoals, setOtherGoals] = useState(0);
   const [scoreError, setScoreError] = useState(null);
@@ -202,7 +217,14 @@ function GameDayView({ myTeamId, teams }) {
   }
 
   const played = match.status === 'played';
-  const canSubmitScore = !played && !!myCaptainedTeamId && isMatchOverdue(match);
+  // Attendance has to actually be recorded (at least one real confirmed
+  // row, not just the match being overdue) before scoring unlocks — a
+  // captain shouldn't be able to submit a score, or even edit the
+  // opponent's reported score, for a team they haven't checked anyone in
+  // for yet.
+  const myTeamInMatch = myCaptainedTeamId === match.home.id ? match.home : match.away;
+  const myConfirmedCount = myCaptainedTeamId ? myTeamInMatch.players.filter((p) => p.confirmed).length : 0;
+  const canSubmitScore = !played && !!myCaptainedTeamId && isMatchOverdue(match) && myConfirmedCount > 0;
   const isHome = myCaptainedTeamId === match.home.id;
   const otherTeam = isHome ? match.away : match.home;
   const otherSubmission = (match.scoreSubmissions || []).find((s) => s.teamId === otherTeam.id);
@@ -217,22 +239,33 @@ function GameDayView({ myTeamId, teams }) {
     return 'readonly';
   };
 
-  const handleToggle = async (teamId, playerId, confirmed) => {
-    setToggling(true);
+  // Stages the toggle locally instead of sending it immediately — see
+  // usePendingChanges. Toggling a box back to its own server-confirmed
+  // value drops the pending entry entirely, rather than staging a no-op
+  // change, so the banner's count only ever reflects real, sendable edits.
+  const handleToggle = (teamId, playerId, currentlyChecked) => {
+    const key = `${playerId}:${teamId}`;
+    const nextChecked = !currentlyChecked;
+    const serverConfirmed = [match.home, match.away]
+      .find((t) => t.id === teamId)
+      ?.players.some((p) => p.id === playerId && p.confirmed);
+    if (nextChecked === serverConfirmed) {
+      attendancePending.unstage(key);
+    } else {
+      attendancePending.stage(key, { playerId, teamId, action: nextChecked ? 'add' : 'remove', source: 'regular' });
+    }
+  };
+
+  const handleConfirmAttendance = async () => {
+    setAttendanceError(null);
+    setConfirmingAttendance(true);
     try {
-      if (confirmed) {
-        await removeFromRoster(playerId, teamId);
-        // Nothing to credit a goal to once they're not confirmed anymore.
-        setGoalsByPlayer((prev) => {
-          const next = { ...prev };
-          delete next[playerId];
-          return next;
-        });
-      } else {
-        await addToRoster(playerId, teamId, 'regular');
-      }
+      await submitRosterBatch(Array.from(attendancePending.pending.values()));
+      attendancePending.clear();
+    } catch (err) {
+      setAttendanceError(err.message);
     } finally {
-      setToggling(false);
+      setConfirmingAttendance(false);
     }
   };
 
@@ -330,6 +363,14 @@ function GameDayView({ myTeamId, teams }) {
         <span className="record-score-team record-score-team-right">{match.away.name}</span>
       </div>
 
+      <PendingChangesBanner
+        count={attendancePending.count}
+        onConfirm={handleConfirmAttendance}
+        confirming={confirmingAttendance}
+        error={attendanceError}
+        label="Confirm attendance"
+      />
+
       <div className="record-roster-grid">
         <RosterColumn
           team={match.home}
@@ -337,8 +378,8 @@ function GameDayView({ myTeamId, teams }) {
           isMyTeam={match.home.id === myTeamId}
           scorers={match.scorers}
           mode={getColumnMode(match.home.id)}
-          onToggle={(playerId, confirmed) => handleToggle(match.home.id, playerId, confirmed)}
-          toggling={toggling}
+          onToggle={(playerId, checked) => handleToggle(match.home.id, playerId, checked)}
+          pending={attendancePending}
           goalsByPlayer={goalsByPlayer}
           onGoalChange={(playerId, val) => setGoalsByPlayer((prev) => ({ ...prev, [playerId]: val }))}
         />
@@ -348,8 +389,8 @@ function GameDayView({ myTeamId, teams }) {
           isMyTeam={match.away.id === myTeamId}
           scorers={match.scorers}
           mode={getColumnMode(match.away.id)}
-          onToggle={(playerId, confirmed) => handleToggle(match.away.id, playerId, confirmed)}
-          toggling={toggling}
+          onToggle={(playerId, checked) => handleToggle(match.away.id, playerId, checked)}
+          pending={attendancePending}
           goalsByPlayer={goalsByPlayer}
           onGoalChange={(playerId, val) => setGoalsByPlayer((prev) => ({ ...prev, [playerId]: val }))}
         />

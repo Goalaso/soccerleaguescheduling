@@ -45,12 +45,22 @@ export function usePublishedTeams(seasonId) {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['publishedTeams', seasonId] }),
   });
 
+  // Applies several staged move/remove/add operations (plus an optional
+  // captain change) in one request instead of one round trip per click.
+  const batchEditMutation = useMutation({
+    mutationFn: ({ operations, captainPlayerId, captainTeamId }) =>
+      apiPost('/teams/roster/batch', { seasonId, operations, captainPlayerId, captainTeamId }),
+    onSuccess: applyTeamsUpdate,
+  });
+
   const publish = (nextTeams) => publishMutation.mutateAsync(nextTeams);
   const addSeasonPlayer = (teamId, playerId) => addPlayerMutation.mutateAsync({ teamId, playerId });
   const removeSeasonPlayer = (teamId, playerId) => removePlayerMutation.mutateAsync({ teamId, playerId });
   const moveSeasonPlayer = (teamId, playerId, toTeamId) =>
     movePlayerMutation.mutateAsync({ teamId, playerId, toTeamId });
   const setCaptain = (teamId, playerId) => setCaptainMutation.mutateAsync({ teamId, playerId });
+  const batchEditRoster = ({ operations, captainPlayerId, captainTeamId }) =>
+    batchEditMutation.mutateAsync({ operations, captainPlayerId, captainTeamId });
 
   return {
     teams: data?.teams ?? null,
@@ -63,5 +73,6 @@ export function usePublishedTeams(seasonId) {
     removeSeasonPlayer,
     moveSeasonPlayer,
     setCaptain,
+    batchEditRoster,
   };
 }

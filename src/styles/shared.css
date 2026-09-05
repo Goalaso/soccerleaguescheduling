@@ -11,14 +11,16 @@
 .preview-box,
 .top-scorer-callout,
 .team-stat-row,
-.team-summary-stats {
+.team-summary-stats,
+.pending-changes-banner {
   background: var(--bg-panel);
 }
 
 .panel,
 .generated-header,
 .notify-breadcrumb,
-.modal-card {
+.modal-card,
+.pending-changes-banner {
   color: white;
 }
 
@@ -41,6 +43,25 @@
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--text-muted);
+}
+
+/* Column headers that double as sort buttons (Manage Players) — reset the
+   native button chrome so they read identically to the plain <span>
+   headers used everywhere else in this row family, just clickable. */
+.player-table-sort-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.player-table-sort-arrow {
+  color: var(--accent-soft);
+  font-size: 0.65em;
 }
 
 .player-table-head {
@@ -295,7 +316,9 @@
 .record-player-row,
 .player-manage-row,
 .roster-table-row,
-.unassigned-player-row {
+.unassigned-player-row,
+.team-roster-row,
+.player-stats-row {
   display: grid;
   align-items: center;
 }
@@ -321,7 +344,9 @@
 .record-player-row > *,
 .player-manage-row > *,
 .roster-table-row > *,
-.unassigned-player-row > * {
+.unassigned-player-row > *,
+.team-roster-row > *,
+.player-stats-row > * {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -335,6 +360,34 @@
 .player-name {
   font-weight: 600;
   font-size: 0.9rem;
+}
+
+/* "N unconfirmed changes" + confirm button — see PendingChangesBanner.jsx.
+   Floats fixed to the bottom of the viewport instead of sitting in normal
+   document flow, so it doesn't shove the rest of the page down every time
+   a row gets staged (and stays reachable without scrolling back up).
+   Background/color come from the shared selector lists above; z-index 50
+   sits above ordinary content but below the modal overlay (100). */
+.pending-changes-banner {
+  position: fixed;
+  left: 50%;
+  bottom: 1.5rem;
+  transform: translateX(-50%);
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  justify-content: center;
+  border-radius: 8px;
+  padding: 1rem 1.5rem;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  max-width: calc(100% - 2rem);
+}
+
+.pending-changes-error {
+  color: var(--danger-text);
+  font-size: 0.85rem;
 }
 
 .players-panel-header {
@@ -360,6 +413,11 @@
   font-weight: 600;
   padding: 0.25rem 0.6rem;
   border-radius: 4px;
+  /* Grid items stretch to fill their column by default — without this, a
+     badge placed directly in a grid row (any *-row class) stretches its
+     background wider than its text instead of hugging the content. No-op
+     outside grid contexts. */
+  justify-self: start;
 }
 
 .badge-midfielder,

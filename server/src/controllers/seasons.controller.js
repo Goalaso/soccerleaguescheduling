@@ -515,6 +515,111 @@ async function sendPromotionEmail(result) {
   });
 }
 
+// Same subject/body/conditions as sendAvailabilityOutcomeEmail, but builds
+// a message object instead of sending immediately — lets the batch path
+// below collect everyone's outcome email and fire them all via
+// sendEmailBatch after commit, instead of one Graph call per player.
+function buildAvailabilityOutcomeMessage(result) {
+  if (!result || !result.email) return null;
+  if (result.outcome === 'confirmed' && EMAIL_NOTIFIED_TYPES.includes('season_confirmed')) {
+    return {
+      to: result.email,
+      subject: `You're confirmed for ${result.seasonLabel}!`,
+      body: `You're confirmed for ${result.seasonLabel}. See you on the field!`,
+    };
+  }
+  if (result.outcome === 'waitlisted' && EMAIL_NOTIFIED_TYPES.includes('season_waitlisted')) {
+    return {
+      to: result.email,
+      subject: `You're on the waitlist for ${result.seasonLabel}`,
+      body: `Season is full — you're #${result.waitlistPosition} on the waitlist for ${result.seasonLabel}. We'll email you if a spot opens.`,
+    };
+  }
+  return null;
+}
+
+function buildPromotionMessage(result) {
+  if (!result || !result.promotedPlayerId || !result.promotedEmail) return null;
+  if (!EMAIL_NOTIFIED_TYPES.includes('season_confirmed')) return null;
+  return {
+    to: result.promotedEmail,
+    subject: `You're confirmed for ${result.seasonLabel}!`,
+    body: `A spot opened up — you're confirmed for ${result.seasonLabel}. See you on the field!`,
+  };
+}
+
+// One admin "confirm changes" click from AvailabilityReviewView can stage
+// several players' availability changes at once — applies all of them
+// sequentially (a real for loop, not Promise.all) inside ONE transaction,
+// instead of the N separate requests + N heavyweight transactions that N
+// individual clicks used to cost. Sequential matters: resolveAvailabilityTx
+// re-reads the season's current waitlist on every call, so an earlier
+// decline's auto-promotion needs to be visible to later iterations —
+// admin changes always use respectCapacity: false, so this ordering only
+// matters for decline-then-promotion, never confirm-vs-confirm capacity
+// races. All-or-nothing: any single invalid playerId rolls back the whole
+// batch rather than silently applying some of the admin's clicks.
+async function setAvailabilityBatch(req, res, next) {
+  const changes = Array.isArray(req.body.changes) ? req.body.changes : [];
+  if (!changes.length) {
+    return res.status(400).json({ error: 'changes must be a non-empty array' });
+  }
+  for (const c of changes) {
+    if (!c.playerId || typeof c.isAvailable !== 'boolean') {
+      return res.status(400).json({ error: 'Each change needs playerId and a boolean isAvailable' });
+    }
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const results = [];
+    try {
+      for (const c of changes) {
+        const result = await resolveAvailability(client, req.params.id, c.playerId, c.isAvailable, req.user.sub);
+        if (!result) {
+          const err = new Error("Player is not part of this season's availability list");
+          err.status = 404;
+          throw err;
+        }
+        results.push(result);
+      }
+    } catch (err) {
+      await client.query('ROLLBACK');
+      if (err.status) return res.status(err.status).json({ error: err.message });
+      throw err;
+    }
+    await client.query('COMMIT');
+
+    // Best-effort, after commit — a slow/failed Outlook call must never
+    // fail the admin action itself, which has already succeeded.
+    try {
+      const messages = results
+        .flatMap((r) => [buildAvailabilityOutcomeMessage(r), buildPromotionMessage(r)])
+        .filter(Boolean);
+      if (messages.length) {
+        await getAccessToken();
+        await sendEmailBatch(messages);
+      }
+    } catch (err) {
+      console.error('Failed to send season availability batch emails', err);
+    }
+
+    res.json({
+      results: results.map((r) => ({
+        playerId: r.playerId,
+        isAvailable: r.isAvailable,
+        waitlisted: r.waitlisted,
+        respondedAt: r.respondedAt,
+      })),
+    });
+  } catch (err) {
+    next(err);
+  } finally {
+    client.release();
+  }
+}
+
 async function setAvailability(req, res, next) {
   const { isAvailable } = req.body;
   if (typeof isAvailable !== 'boolean') {
@@ -648,6 +753,7 @@ module.exports = {
   create,
   getAvailability,
   setAvailability,
+  setAvailabilityBatch,
   setMyAvailability,
   resolveAvailability,
   sendAvailabilityOutcomeEmail,
